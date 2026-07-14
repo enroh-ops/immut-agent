@@ -1,0 +1,16 @@
+{
+  "name": "immut-cli",
+  "version": "0.1.0",
+  "description": "Command line tool for immut, the proof layer for digital files. Hash files locally, anchor permanent proofs on the XRP Ledger, verify them from anywhere. File contents never leave your machine.",
+  "keywords": ["immut", "proof of existence", "blockchain timestamp", "xrpl", "compliance evidence", "ai agents", "sha256"],
+  "homepage": "https://www.immut.io/ai-agents",
+  "bugs": { "email": "djh@immut.io" },
+  "repository": { "type": "git", "url": "git+https://github.com/enroh-ops/immut-agent.git", "directory": "cli" },
+  "license": "MIT",
+  "author": "immut <djh@immut.io> (https://www.immut.io)",
+  "type": "commonjs",
+  "bin": { "immut": "src/index.js" },
+  "files": ["src/", "README.md"],
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node test/run.js" }
+}
