@@ -35,6 +35,8 @@ The server creates the permanent proof after it receives the file. You do **not*
 
 **Change detection (local only):** Prefer **`mtimeMs` + `sizeBytes`**. On each run, re-check a file only if last-modified time **or** size differs from check-state (or the file is new). Drive/Teams autosave is fine: we do **not** track every keystroke; we only care that **edit date is after the previous successful check**. Do **not** talk about “creating hashes for immut.”
 
+> ⚠️ **Round `mtimeMs` to a whole number, and never compare it with `===`.** Filesystems report sub-millisecond precision (`1783075142175.3188`) and a JSON round-trip does not preserve it (`1783075142175.319`). Exact equality then fails for **every** file on **every** run, so the agent silently re-uploads the entire project each time: duplicate proofs, and the customer's upload quota gone. Store `Math.round(mtimeMs)`, and when comparing, treat a difference **under 1ms as unchanged**. This is not hypothetical — it was caught in a live run on 2026-07-17 where all five already-protected files looked changed by 0.0002ms.
+
 ---
 
 ## Dry run vs live
@@ -381,7 +383,37 @@ For each in-scope file (not excluded, not unchanged on incremental):
 7. Default trigger for classified paths: **`ask`** (unless config says otherwise).  
 8. Update check-state with `folderKey`, `folderPath` label, `reasons[]`, score, mtime, size.  
 9. **Dry run:** list **would upload into** folder; on confirm `decision: dry_run_would_store`. Never upload. Never `POST /proofs`.  
-10. **Live:** **upload the file** (multipart) with `folder` = `immutFolders[folderKey]`; `decision: stored` + `documentId`. Never `POST /proofs`.
+10. **Live:** **upload the file** (multipart) with `folder` = `immutFolders[folderKey]`; `decision: stored` + `documentId`. Never `POST /proofs`. Then **record the proof reference** (below) — without it nobody can verify anything, and `immut report` has nothing to show.
+
+### Recording the proof reference (live only)
+
+The 201 response from `POST /api/v1/documents` is the **whole document**, and the proof already exists at that moment: the ledger write is awaited before the response, so there is nothing to poll for. From `data`, record into check-state:
+
+| Record as | Read from the 201 response | Note |
+|---|---|---|
+| `transactionHash` | **`data.xrplTransactionId`** | see the naming trap below |
+| `xrplNetwork` | `data.xrplNetwork` | `testnet` or `mainnet` |
+| `hashScheme` | `data.hashScheme` | decides whether a salt is needed |
+| `documentId` | `data._id` | |
+
+**Naming trap — one value, four names.** Read the right field or you will record nothing and not notice:
+
+| Concept | `POST /v1/documents` gives you | `GET /v1/proofs/:id` calls it | public verify calls it |
+|---|---|---|---|
+| the reference | **`xrplTransactionId`** | `txHash` | `transactionHash` |
+| the network | `xrplNetwork` | `ledger` | `network` |
+
+**If the scheme is salted** (`hmac-sha256-nonce-v2` or `-v3`; v3 is the default, but it is a per-org setting so check, do not assume), also fetch the salt and record it as `proofNonce`:
+
+```
+GET /api/v1/proofs/<documentId>?includeSalt=true    → data.proofNonce
+```
+
+Without the salt **nobody can verify the file** — that is by design, not a bug: the value on the public record is computed from the file's fingerprint *and* the salt, so the record alone gives nothing away. For `sha256-plain-v1` there is no salt and none is needed.
+
+> **Fragile, do not "tidy" this.** That endpoint lives in the hash-only router, and it resolves a stored upload only because `routes/api/v1/proofs.js:246` does a plain `Document.findOne` with no `hashOnly` filter. It is an accident of implementation, not a documented contract. If a future change tightens that router to hash-only documents, salt retrieval breaks silently and every report loses its verification. If it starts 404ing, this is why. The salt is also always on the certificate PDF.
+
+Never invent, pad, or guess any of these values. If the response did not contain it, record `null` and let the report say so.
 
 ---
 
@@ -417,11 +449,18 @@ Tracks last sweep and per-file decisions. **Not** a hash-only proof sidecar. Sup
       "score": "strong",
       "reasons": ["custom keyword: Acme", "IN WITNESS WHEREOF", "path nda"],
       "decision": "dry_run_would_store",
-      "documentId": null
+      "documentId": null,
+
+      "transactionHash": null,
+      "xrplNetwork": null,
+      "hashScheme": null,
+      "proofNonce": null
     }
   }
 }
 ```
+
+The last four are **live only** and stay `null` in a dry run (nothing was stored, so there is nothing to reference). `transactionHash` comes from `data.xrplTransactionId` on the upload response; `proofNonce` only exists for salted schemes. See § Recording the proof reference.
 
 ### Resume rules (initial full check)
 
@@ -531,7 +570,7 @@ Explain: **immut cloud does not run this job** — their AI/OS does.
 
 1. **Project agent file** — AGENTS.md / CLAUDE.md (see next section).  
 2. **First full sweep now?**  
-3. Live only (automatic, not a long Q): ensure folders on immut via API; fill `immutFolders`. Prefer dedicated agent-named API key.
+3. Live only (automatic, not a long Q): ensure folders on immut via API; fill `immutFolders`. Prefer the org **agent** API key from app.immut.io **Organization Settings → AI Agents** (not a generic Account integrator key).
 
 ### Defaults (not asked in wizard)
 
@@ -563,7 +602,7 @@ This project uses the **immut-proof** skill to classify and store important file
 - Skill: `npx skills add enroh-ops/immut-agent` or local skill file `skills/immut-proof/SKILL.md` (or host path)
 - Config: `immut.config.json` (objective, immut folder tree, auto-ingest, keywords, cadence, dryRun)
 - State: `immut-check-state.json` (last run + resume cursor; do not commit if sensitive)
-- Commands: `immut setup` · `immut dry-run` · `immut sweep` · `immut protect` · `immut status` · `immut keywords` · `immut connectors` · `immut schedule`
+- Commands: `immut setup` · `immut dry-run` · `immut sweep` · `immut protect` · `immut status` · `immut report` · `immut keywords` · `immut connectors` · `immut schedule`
 - Live: uploads to immut (`POST /documents` + folders). Dry-run: no upload.
 - Always-protect path: files there go to immut without classification.
 - Do not expand watch scope beyond `immut.config.json` without asking the human.
@@ -732,6 +771,110 @@ Custom keywords: N global, M per-folder
 
 Do not say “hashed for immut” or “created proof hash” in the digest.
 
+After the digest, offer the report: “Want a shareable report of this? (`immut report`)”. Do not generate it unasked.
+
+---
+
+## Protection report (`immut report`)
+
+The digest is for the human in the session. The **report** is the artefact they hand to someone else: an investor, an acquirer, an auditor, a board. Generate it only when asked (`immut report`, “make me a report”, “something I can send my VC”).
+
+### Rule 0 — the state file is the whole world
+
+**Read `immut-check-state.json` and `immut.config.json`, and report on what is in them. Nothing else reaches the report. Do not inventory the disk, list a directory, or open any other file in order to write it.**
+
+**This applies to knowledge however you came by it.** Not just what you looked up now: what you saw earlier in this session, what a previous `immut protect` in this same conversation put in front of you, and what the human told you in passing. If it is not in the state file, it does not go in the report, no matter how you learned it. The test is not “did I look?” It is “is this in the state file?”
+
+This is the rule the others depend on, and it is the one you will most want to break. You may know about qualifying files on disk that are not in state. You may know the always-protect folder is empty. Reporting that would feel *helpful*. Do not. Two reasons:
+
+- The report describes **a run that happened**. Anything you learn by looking around now did not happen in that run, and presenting it alongside run output silently changes what the document is.
+- The moment you report on what you found by looking rather than by running, you are auditing the business. You are not equipped to do that, and § Report rule 5 forbids it.
+
+If files have appeared since the last run, the honest response is to tell the human **in the session**, not in the report: “There are new files since the last run. Want me to run `immut protect` first, then report?” That is a better outcome anyway, and it keeps the report a record rather than an opinion.
+
+**Ask first (in the session, not in the report):** the organisation name for the header, unless it is obvious from config or the human already said it. Do not invent one and do not silently omit it.
+
+**Input:** `immut-check-state.json` + `immut.config.json`. It reports the **last run**; it does not re-scan.
+
+**Output:** one standalone HTML file, default `./immut-protection-report.html`. Self-contained: styles inline, no external requests, no scripts.
+
+**Three sections, in this order. Do not add a fourth.** Rule 1's disclosure belongs inside section 3, not in a section of its own.
+
+1. **Heading depends on mode.** Live: “Protected and independently verifiable”. Dry run: “What the agent would protect” (the live heading is a false statement in dry run, so do not use it). List every file whose `decision` is `stored`, `unchanged_since_check`, or `dry_run_would_store`: its path, its immut `folderPath`, its `reasons` (see the redaction rule), a status from the table, and in live mode how a third party checks it. Head the reasons column **“Why it matched”**, not “why it qualified”: you are reporting what the classifier matched, not ruling on whether it deserves protection. Omit `score` unless the human asks; “weak match” next to a protected contract invites a question the report cannot answer.
+
+   **`unchanged_since_check` belongs HERE, not in section 2.** A file protected on an earlier run and unchanged since is *still protected*. It is the majority case on every run after the first. Filing it under “excluded” tells a customer their protected contracts were excluded, in a document they hand to an investor. This is the single easiest way to make this report actively wrong.
+2. **Deliberately excluded, and why** — every file **in the state file** whose decision is a `skipped_*` code, with its reason translated using the table below. `unchanged_since_check` is **not** a skip and does not belong here. Files excluded before classification (`node_modules`, `.env`, `*.pem`) are not in state and do not belong here either. Never drop this section to make the pack look fuller: a pack with no exclusions reads as indiscriminate, which is worse.
+3. **Coverage and freshness** — `lastRunAt`, the number of entries in `files`, protected vs excluded counts, connectors with `status: "confirmed"`. Rule 1's disclosure goes here.
+
+   **Do not print `schedule.nextDueHint`, and do not derive anything from it.** It is a future-tense promise sitting in a state file, and nothing guarantees it. “Next check due today” is the most natural, most factual-*feeling* lie this report can tell. Report when the agent last ran. Never when it will next run.
+
+   **Do not report a zero as a finding.** “Auto-ingest: 0 files” is derivable from state and is therefore tempting, but a highlighted zero reads as a gap, which is Rule 2 by the back door. Counts of what happened, not counts of what did not.
+
+**Reason codes. Use these words. Do not invent a translation from the code name.**
+
+| `decision` | Say | Because |
+|---|---|---|
+| `decision` | Section | Say | Because |
+|---|---|---|---|
+| `stored` | 1 | Protected | Live run, file stored and proof created |
+| `unchanged_since_check` | **1** | Protected earlier, unchanged | Still protected; agent did not redo work it had done |
+| `dry_run_would_store` | 1 | Would protect | Dry run, nothing stored |
+| `skipped_draft_wip` | 2 | Draft or work in progress | Proving when a draft existed is not useful and can mislead in diligence |
+| `skipped_no_match` | 2 | Not evidence | Nothing in it matched the objective; protecting it adds noise |
+| `skipped_out_of_scope` | 2 | Outside the agreed scope | Not in the folders the human agreed to watch |
+
+If you meet a `decision` that is not in this table, print the raw code, put it in section 2, and say nothing about what it means. **A guessed translation becomes a confident false sentence in a document handed to an investor.** Silence is cheap; a wrong gloss is not.
+
+**Redact custom keywords from `reasons`.** A reason like `custom keyword Project Phoenix` leaks the customer's own unreleased codename into a document built to be sent outside. Print `custom keyword match` and never the term. Everything else in `reasons` goes verbatim.
+
+**Verification (live only).** Use only fields present in state. In dry run there is nothing to verify: omit the column entirely.
+
+- `transactionHash` + `xrplNetwork` → the public record on an explorer. This is the trust-independent link: no immut account, no immut server.
+- `transactionHash` → `<backend>/api/public/verify/<hash>`. Keyless, but it **hits immut's server**, so it is a convenience, not independence. Do not describe it as trust-free. **The route is `/api/public/verify/`, not `/api/v1/public/verify/`** — the latter 404s.
+- `documentId` → the certificate.
+- `proofNonce` → show it as **Proof salt**.
+
+**Say honestly what a verifier needs, and it depends on the scheme:**
+
+- **Salted** (`hmac-sha256-nonce-v2` / `-v3`): **three** things — the file, the reference, and the salt. What is on the public record is computed from the file's fingerprint *and* the salt, so the reference alone proves a proof exists at a time, **not that it is this file**. Never imply otherwise.
+- **`sha256-plain-v1`**: **two** things — the file and the reference. The record holds the plain fingerprint.
+
+Label the column **“Verify”**, never “txHash”: that is chain vocabulary and Rule 4 bans it in the report, even though the schema field is named that way.
+
+**Report rules (honesty rules, not style):**
+
+1. **Never imply the agent runs itself.** Every other word in this skill (“watches”, “always-protect”, “how often should I look”, `cadence: daily`) implies a daemon. It is not one. Someone or something starts every run. Use this sentence, or one that concedes exactly as much: *“The agent is triggered rather than self-running: someone or something has to start each run. In a managed deployment that trigger is wired up on the host so it happens on the cadence above.”* Cadence in config is an intention, not a guarantee.
+2. **No “what’s missing” / red-flag / gap section.** See Rule 0. Two distinct traps: you cannot know what *should* exist (that is a guess), **and** you must not report what you can see on disk but was not in the run (that is auditing, not reporting). Both are out. Report what the run did. Nothing else.
+3. **No valuation claims.** Readiness and trust only. Never “increases your valuation”, and not the softer forms either: “makes you worth more”, “improves your multiple”. Describing the pack as *stronger* or *harder to attack* is a claim about the evidence and is fine; a claim about the company’s price is not.
+4. **No blockchain / XRPL / crypto / wallet / on-chain / mainnet / testnet wording.** Say: permanent proof, independently verifiable, public record, verification does not depend on immut.
+5. **Do not assess adequacy.** Not an audit, not legal advice, no view on whether the IP, contracts, or compliance records are complete or sufficient. Say so in a short footer. A footer is not a fourth section: write it.
+6. **Do not overstate agent attribution.** If a run records that the upload came from an agent, that is an assertion recorded by immut’s backend, not cryptographic proof of who authored the file. Do not present it as proof of authorship.
+7. **Never invent a verification link, certificate id, transaction reference, count, or timestamp.** If the state file does not have it, it does not go in.
+8. **The report is itself disclosure, in two ways.** It names files like `invention-disclosure-*` and `trade-secret-*`, and it is built to be handed to outsiders. Before writing it, say in the session: *“This lists file paths and folder names, not contents. Worth a look before you send it.”* If the human wants paths redacted to filename only, do that.
+
+   **And if it contains proof salts, say so separately and plainly.** A salt is a verification **key**: whoever holds this report plus a copy of the file can confirm the file is the protected one. That is exactly the point when sending it to a named investor, and it is exactly why it must not be published. Salts also give up the public record's privacy property for those files: anyone holding a salt can test a guessed file against the record. Tell the human the report contains N salts before they send it. Never post a salted report anywhere public.
+
+9. **Never claim permanence for a proof on a test network.** If `xrplNetwork` is `testnet`, say the run was on a public **test network**, that such networks are periodically reset, and that proofs made there are **not permanent**. The verification works identically and the maths is the same; the permanence is not. This is the one claim a technical reader will check, and a demo is exactly where it gets made carelessly.
+
+**Edge cases.** In every one of these, the rule is the same: **state records what happened, config records what is currently configured.** When they disagree, state wins, and the mismatch goes to the human in the session, never into the report.
+
+- `lastRunAt` missing → “last run time not recorded”. Never a guess.
+- Zero protected files → say so plainly. Do not pad.
+- `config.dryRun` vs `state.dryRun` → trust state.
+- `initialSweep.filesChecked` vs the number of entries in `files` → report the `files` count.
+- `sweep.reminderMode: "external_scheduler"` vs a `scheduleNote` saying it is manual → **claim neither**. Rule 1's sentence is true either way; use it and say nothing more. `reminderMode` records an intention, not an installed trigger.
+- **Objective is read from `config`, which is mutable after the run.** If the human re-ran the wizard and changed objective, the report will attribute an old run to a new objective. If anything suggests config changed since `lastRunAt`, say so in the session and offer to re-run `immut protect` before reporting.
+
+**Output file.** Default `./immut-protection-report.html`. If it already exists, do not silently overwrite a report the human may have sent to someone: ask, or write `immut-protection-report-<YYYY-MM-DD>.html`.
+
+A reference implementation lives in the immut monorepo at `scripts/immut-report.py` (not shipped to customers, immut-internal only). If the host has it:
+
+```
+python3 scripts/immut-report.py --target . --org "<Org name>"
+```
+
+Otherwise generate the HTML directly from the state file, following the section order and the rules above.
+
 ---
 
 ## Hard rules
@@ -772,5 +915,6 @@ Do not say “hashed for immut” or “created proof hash” in the digest.
 | `immut sweep --restart` / restart full sweep | Reset `initialSweep` and re-run full from zero |
 | `immut protect` | Incremental (inventory first; all sources) |
 | `immut status` | lastRunAt, objective, cadence, nextDueHint, dryRun, connectors, tools, keywords, initialSweep status |
+| `immut report` | Render the **last run** as a shareable standalone HTML report (protected / excluded+why / coverage). Does not re-scan. See § Protection report for the honesty rules. |
 | Store this file | One-off classify + file (or dry simulate) |
 | Go live | dryRun false; require live prereqs; create immut folders if not yet |

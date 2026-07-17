@@ -34,15 +34,11 @@ immut is the **proof vault + (soon) control plane**. Your AI host runs the agent
 ### 1. Create access (live mode only)
 
 1. Sign in at [app.immut.io](https://app.immut.io) on a plan with **API access**.  
-2. Open [Account → API keys](https://app.immut.io/account?tab=api-keys).  
-3. Create a key (name it e.g. `immut-agent-skill`) with:
+2. Open **Organization Settings → AI Agents** (or [app.immut.io/organization/settings#ai-agents](https://app.immut.io/organization/settings#ai-agents)).  
+3. Create an **agent** API key (default name `immut-agent-skill`). Scopes are fixed for the skill (`documents`, `folders`, `certificates`, `workspaces` read/write as required).  
+4. Copy the key once. Note a **workspace id** (app UI, or `GET /api/v1/workspaces`).  
 
-   - `documents:write`, `documents:read`  
-   - `folders:read`, `folders:write`  
-   - `certificates:read`  
-   - `workspaces:read`  
-
-4. Copy the key once. Note a **workspace id** (app UI, or `GET /api/v1/workspaces`).
+   Integrator / Zapier keys still live under [Account → API keys](https://app.immut.io/account?tab=api-keys) — prefer the **agent** key so uploads are attributed as agent on immut and on the permanent record.
 
 You can skip this if you only want a **dry run** first.
 
