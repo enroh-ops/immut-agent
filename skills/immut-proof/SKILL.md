@@ -61,8 +61,8 @@ The server creates the permanent proof after it receives the file. You do **not*
 **Dry run:** protection brief (objective + scope); no API.  
 **Live:**
 
-1. `IMMUT_API_KEY` with scopes: `documents:write`, `documents:read`, `folders:read`, `folders:write`, `certificates:read`, `workspaces:read`. Prefer a **dedicated key named for the agent** (e.g. `immut-agent-skill`) so usage is easier to spot until platform agent-keys exist.  
-2. Workspace id.  
+1. `IMMUT_API_KEY` with scopes: `documents:write`, `documents:read`, `folders:read`, `folders:write`, `certificates:read`, `workspaces:read` (add `workspaces:write` only if the agent should be able to **create** a workspace when the org has none). Prefer a **dedicated key named for the agent** (e.g. `immut-agent-skill`) so usage is easier to spot until platform agent-keys exist.  
+2. Workspace id — **chosen at go-live** from `GET /api/v1/workspaces` (0 → create one, 1 → use it, >1 → ask which; see § After Q7). Not guessed.  
 3. Upload consent. **No hash-only option** in this skill — only file upload.
 
 ---
@@ -395,7 +395,7 @@ For each in-scope file (not excluded, not unchanged on incremental):
 7. Default trigger for classified paths: **`ask`** (unless config says otherwise).  
 8. Update check-state with `folderKey`, `folderPath` label, `reasons[]`, score, mtime, size.  
 9. **Dry run:** list **would upload into** folder; on confirm `decision: dry_run_would_store`. Never upload. Never `POST /proofs`.  
-10. **Live:** **upload the file** (multipart) with `folder` = `immutFolders[folderKey]`; `decision: stored` + `documentId`. Never `POST /proofs`. Then **record the proof reference** (below) — without it nobody can verify anything, and `immut report` has nothing to show.
+10. **Live:** **upload the file** (multipart) with `folder` = `immutFolders[folderKey]`; `decision: stored` + `documentId`. If `immutFolders[folderKey]` is missing/unresolvable, use the **root fallback** (omit `folder`, set `filedToRoot: true`, report it) rather than losing the file — see § Live folder create. Never `POST /proofs`. Then **record the proof reference** (below) — without it nobody can verify anything, and `immut report` has nothing to show.
 
 ### Recording the proof reference (live only)
 
@@ -462,6 +462,7 @@ Tracks last sweep and per-file decisions. **Not** a hash-only proof sidecar. Sup
       "reasons": ["custom keyword: Acme", "IN WITNESS WHEREOF", "path nda"],
       "decision": "dry_run_would_store",
       "documentId": null,
+      "filedToRoot": false,
 
       "transactionHash": null,
       "xrplNetwork": null,
@@ -614,7 +615,10 @@ NOT enough for Tier 1.** You have a non-interactive invocation only if you can s
 
 1. **Project agent file** — AGENTS.md / CLAUDE.md (see next section).  
 2. **First full sweep now?**  
-3. Live only (automatic, not a long Q): ensure folders on immut via API; fill `immutFolders`. Prefer the org **agent** API key from app.immut.io **Organization Settings → AI Agents** (not a generic Account integrator key).
+3. **Live only — pick the workspace, then build the folder tree** (do this on go-live):
+   1. **Choose the workspace.** `GET /api/v1/workspaces`. **0** → create one: `POST /api/v1/workspaces {name}` (name it for the objective, e.g. `immut — <objective label>`) and use it — **this needs the `workspaces:write` scope**; if the key lacks it you'll get `INSUFFICIENT_SCOPE`, so **fall back to asking the human to create a workspace in the app** (app.immut.io) and re-run. **1** → use it (say which). **>1** → **ask which** (numbered list per § Multiple-choice only) — this workspace is used for all ongoing sweeps. Store `workspaceId`. (Changing it later means re-running the folder ensure for the new workspace.)
+   2. **Ensure + map the folder tree** in that workspace — see § Live folder create (use `parentFolder=all`; create missing; map every `folderKey → id` into `immutFolders`).
+   Prefer the org **agent** API key from app.immut.io **Organization Settings → AI Agents** (not a generic Account integrator key).
 
 ### Defaults (not asked in wizard)
 
@@ -758,19 +762,55 @@ Only after wizard is complete (or human skipped wizard explicitly).
 6. **Live:** for each confirmed file (and all auto-ingest), **upload the file** via multipart `POST /documents`.  
 7. Persist check-state frequently; digest must list **sources used**. Never mention hash-only proofs.
 
-### Live folder create
+### Live folder create — ensure the whole tree, map every id (do this at go-live)
+
+Build the objective folder tree on immut and record **every** `folderKey → folderId` in
+`immutFolders`. Files are filed with `folder=immutFolders[folderKey]`, so an **unmapped key = a file
+dumped at the workspace root**. Get the mapping right here.
+
+> ⚠️ **The default folder list does NOT include child folders.** `GET /api/v1/folders?workspace=$WS`
+> returns **top-level folders only**. If you look for `Executed` in that list you won't find it, will try
+> to create it, get **"already exists"**, and never learn its id → uploads land at the workspace root.
+> **To see children you must query per parent** (works on every backend):
 
 ```bash
-# List existing
+# top-level folders (default)
 curl -s "$API/api/v1/folders?workspace=$WS" -H "Authorization: Bearer $KEY"
-# Create
-curl -s -X POST "$API/api/v1/folders" \
-  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
-  -d '{"name":"Intellectual property","workspace":"'"$WS"'"}'
-# Child: include parentFolder id
+# a parent's CHILDREN (the only reliable way to see them everywhere)
+curl -s "$API/api/v1/folders?workspace=$WS&parentFolder=$PARENT_ID" -H "Authorization: Bearer $KEY"
+# one-call optimisation on newer backends: EVERY folder at all depths
+curl -s "$API/api/v1/folders?workspace=$WS&parentFolder=all" -H "Authorization: Bearer $KEY"
 ```
 
-Reuse folder if same name under same parent exists.
+**Ensure procedure — for each folder in `folderTree`, top-down:**
+
+1. List **top-level** folders (default call). Optionally try `parentFolder=all`; **only trust it if it
+   actually returns children** — if a parent you know has children shows none, this backend doesn't
+   support `all`, so ignore it and use per-parent queries.
+2. **Top-level folder:** find by name in the top-level list; if missing, `POST /folders {name, workspace}`;
+   record its id.
+3. **Child folder:** list that parent's children via `parentFolder=<parentId>`, find by name; if missing,
+   `POST /folders {name, workspace, parentFolder:<parentId>}`; record its id.
+4. **On `"already exists"`** from a create: it exists but you didn't see it — **re-query
+   (`parentFolder=<parentId>`, or `all`) and take the existing id.** Never proceed with an unmapped key.
+5. Write **every** `folderKey → id` into `immutFolders` (config). Verify no key is missing before sweeping.
+
+```bash
+# create top-level
+curl -s -X POST "$API/api/v1/folders" -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" -d '{"name":"Contracts","workspace":"'"$WS"'"}'
+# create child (needs parentFolder)
+curl -s -X POST "$API/api/v1/folders" -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Executed","workspace":"'"$WS"'","parentFolder":"'"$CONTRACTS_ID"'"}'
+```
+
+**Root fallback (unresolved folder at upload time).** Folders are built here at go-live, so this should
+not happen. But if on a later sweep a mapped `folderId` can't be resolved (a folder was deleted/renamed
+in the app), do **not** drop the file and do **not** rebuild the tree mid-sweep: upload it to the
+**workspace root** (omit `folder`), set `filedToRoot: true` in check-state, and report it in the digest
+(`N filed to workspace root — folder missing, re-run setup`). The file is still protected; it is just
+unfiled until the human re-runs go-live/setup.
 
 ### Live protect = upload file only (the only protect API)
 
