@@ -76,12 +76,22 @@ When the human says `immut dry-run`, `immut setup`, “new user”, “run the w
 3. **Do not invent answers** from the folder tree on disk or auto-complete the wizard.  
 4. **Do not** run a full auto-classify / write a full `immut-check-state.json` until the wizard is finished (or the human explicitly says: “skip wizard; use existing config and sweep”).  
 
-If `immut.config.json` already exists:
+If `immut.config.json` already exists **and this is an interactive run**:
 
 - Ask: **“Use existing config, or re-run the full wizard?”** using **numbered choices**.  
 - Only skip the wizard if they choose existing config.
 
-**Do not skip** folder proposal accept (Q3), always-protect folder (Q6 — may skip only if human chooses skip), cadence (Q7), or project agent-file offer unless the human explicitly declines (record decline).
+**Unattended / scheduled runs (no human to answer).** A run is unattended when the invocation says so
+(e.g. the scheduled command's `immut protect: unattended …` directive) **or** there is no interactive
+human to answer. In an unattended run you **must not** run the wizard and **must not** ask the
+"existing config vs re-wizard" question — it would just hang and protect nothing. Instead:
+
+- If config exists → **use it and run an incremental sweep** (this is the whole point of a scheduled run).
+- If **no** config exists → do **not** guess an objective or consent. **No-op and log** ("immut: no config,
+  skipping unattended run") and exit. Setup needs a human.
+- Only upload classified files unattended if `sweep.scheduler.unattendedUpload` is `true` (see § After Q7).
+
+**Do not skip** folder proposal accept (Q3), always-protect folder (Q6 — may skip only if human chooses skip), cadence (Q7), or project agent-file offer unless the human explicitly declines (record decline) — these apply to **interactive** setup, not to unattended sweeps.
 
 ### Multiple-choice only (avoid shell/session command words)
 
@@ -573,14 +583,28 @@ Skip this only if the human chose **5 (Manual only)** at Q7, or they decline the
 | 2 | **Hosted/web**, but the host has its **own scheduled-tasks** feature | A host-native recurring task that runs `immut protect` | `host_task` |
 | 3 | Local without a non-interactive command, **or** hosted without a task feature | A recurring **reminder/notification** to run `immut protect` yourself | `reminder` |
 
-Templates for every tier are in **§ Host schedule snippets**. Use **your own** host's non-interactive invocation — you know what host you are (examples: `claude -p "immut protect"`, `codex exec "immut protect"`, `gemini -p "immut protect"`, `cursor-agent -p "immut protect"`). **A shell or a working cron is NOT enough for Tier 1.** You have a non-interactive invocation only if you can show that command **actually producing a sweep** — a cron that fires a command which cannot invoke you protects nothing and is worse than a reminder (it looks done and is silent). If you cannot demonstrate your headless command running `immut protect` end to end, **do not fake Tier 1 — drop to Tier 3.**
+Templates for every tier are in **§ Host schedule snippets**. Use **your own** host's non-interactive
+invocation — you know what host you are. **The scheduled command must be unattended:** it has to tell the
+agent to *use existing config, not run the wizard, not ask anything, run an incremental sweep and upload
+qualifying files* — a **bare** `claude -p "immut protect"` will stop and ask "use existing config or
+re-run the wizard?" and protect nothing. It also needs your host's **non-interactive auto-approval** so
+tool use isn't blocked with no human to approve. So `HEADLESS` is, e.g.:
+
+```
+claude -p "immut protect: unattended — use the existing immut.config.json and immut-check-state.json, do NOT run the wizard or ask anything, run an incremental sweep and upload qualifying new/changed files, then update check-state" --dangerously-skip-permissions
+```
+
+(Other hosts: `codex exec …`, `gemini -p …`, `cursor-agent -p …` with the same directive + that host's
+non-interactive/auto-approve flag. Prefer a **scoped tool allowlist** over a blanket skip where the host
+supports it — the wrapper only needs file-read + the immut upload call.) **A shell or a working cron is
+NOT enough for Tier 1.** You have a non-interactive invocation only if you can show that command **actually producing a sweep** — a cron that fires a command which cannot invoke you protects nothing and is worse than a reminder (it looks done and is silent). If you cannot demonstrate your headless command running `immut protect` end to end, **do not fake Tier 1 — drop to Tier 3.**
 
 **Consent + verify (required):**
 
-1. Show the **exact artifact** you will create (the plist / cron line / task / reminder) and the schedule derived from the Q7 cadence. **Ask before installing any system job** (numbered yes/no).
-2. On yes, install it (Tier 1 & 3 where you have shell access; Tier 2 via the host's task UI/API).
+1. Show the **exact artifact** you will create (the plist / cron line / task / reminder) and the schedule derived from the Q7 cadence. **Ask before installing any system job** (numbered yes/no). Because a scheduled run has no human to confirm each file, this same yes also confirms that **scheduled runs may upload qualifying files automatically, without the per-file `ask`** (they already gave go-live upload consent and chose auto-protect). If they are not comfortable with that, install the trigger with `unattendedUpload: false` — scheduled runs will then only protect the always-protect folder and leave classified files for an interactive run.
+2. On yes, install it (Tier 1 & 3 where you have shell access; Tier 2 via the host's task UI/API). The command you install must be the **unattended** invocation (see above), not the bare phrase.
 3. **Verify by running it, not just listing it.** `launchctl list` / `crontab -l` prove the job is *registered*, not that it can *invoke you* — registration is **not** verification. Trigger the job once (or run the wrapper directly) and confirm it produced a **real sweep**: a fresh `lastRunAt` in check-state, or a log line showing `immut protect` actually ran. **Only an observed sweep earns `verified: true`;** anything less is `verified: false` and is Tier 3 at best.
-4. Record `sweep.reminderMode` and `sweep.scheduler { mechanism, jobLabel, jobPath, invocation, installedAt, verified }`.
+4. Record `sweep.reminderMode` and `sweep.scheduler { mechanism, jobLabel, jobPath, invocation, unattendedUpload, installedAt, verified }` — where `invocation` is the full **unattended** command actually installed.
 
 **If you cannot install anything** (hosted/web with no shell and no host reminder feature): do not claim a reminder you did not create. Say plainly the user must run `immut protect` themselves, and set `reminderMode: manual`.
 
@@ -661,7 +685,8 @@ Example config:
       "mechanism": "launchagent",
       "jobLabel": "io.immut.sweep",
       "jobPath": "~/Library/LaunchAgents/io.immut.sweep.plist",
-      "invocation": "claude -p \"immut protect\"",
+      "invocation": "claude -p \"immut protect: unattended — use existing config and check-state, do NOT run the wizard or ask, run an incremental sweep and upload qualifying new/changed files\" --dangerously-skip-permissions",
+      "unattendedUpload": true,
       "installedAt": "ISO-8601",
       "verified": true
     },
@@ -728,7 +753,7 @@ Only after wizard is complete (or human skipped wizard explicitly).
 1. **Tool inventory**; search **all available sources** (not a human picker).  
 2. If `initialSweep.status === "in_progress"` → **resume** (see Check memory). Else if first full never completed → start `initialSweep` in progress.  
 3. **Auto-ingest first**, then classified candidates.  
-4. Classify with packs + custom keywords → propose (`ask` default).  
+4. Classify with packs + custom keywords → propose (`ask` default). **Unattended run:** no human to ask — upload qualifying files directly if `sweep.scheduler.unattendedUpload` is true, otherwise protect the always-protect folder only and leave classified files for an interactive run.  
 5. **Dry run:** “Would **upload** into …” — no API.  
 6. **Live:** for each confirmed file (and all auto-ingest), **upload the file** via multipart `POST /documents`.  
 7. Persist check-state frequently; digest must list **sources used**. Never mention hash-only proofs.
@@ -770,7 +795,9 @@ curl -s -X POST "$API/api/v1/documents/$DOC_ID/version" \
 
 ### Host schedule snippets
 
-Real templates for **§ After Q7 — set up automatic (or reminder) protection**. Replace `PROJECT` with the project directory and `HEADLESS` with **your own** host's non-interactive command (e.g. `claude -p "immut protect"`). Put the wrapper and log under **`~/.immut/`** — **not** under `~/Documents/` (recent macOS blocks LaunchAgents that execute from there).
+Real templates for **§ After Q7 — set up automatic (or reminder) protection**. Replace `PROJECT` with the project directory and `HEADLESS` with **your own** host's **unattended** command from the scheduler section above — NOT the bare phrase (a bare `claude -p "immut protect"` stops to ask about the wizard and protects nothing). For Claude that is:
+`claude -p "immut protect: unattended — use the existing config and check-state, do NOT run the wizard or ask anything, run an incremental sweep and upload qualifying new/changed files" --dangerously-skip-permissions`.
+Put the wrapper and log under **`~/.immut/`** — **not** under `~/Documents/` (recent macOS blocks LaunchAgents that execute from there).
 
 **Cadence → schedule:** Hourly `0 * * * *` · Daily `0 9 * * *` · Weekly (Mon) `0 9 * * 1` · Custom = translate `sweep.customNote`; if ambiguous, ask.
 
@@ -1046,7 +1073,7 @@ Otherwise generate the HTML directly from the state file, following the section 
 | `immut schedule` | Detect the environment, propose + install + **verify** the best recurring trigger (OS scheduler / host task / reminder), or reconfigure/remove it; update `sweep.reminderMode` + `sweep.scheduler`. See § After Q7 — set up automatic (or reminder) protection |
 | `immut sweep` | Full sweep (inventory first; resume if needed) |
 | `immut sweep --restart` / restart full sweep | Reset `initialSweep` and re-run full from zero |
-| `immut protect` | Incremental (inventory first; all sources) |
+| `immut protect` | Incremental (inventory first; all sources). **Interactive:** if config exists, may confirm existing-config vs re-wizard. **Unattended** (invocation says "unattended", or no human present — this is what scheduled jobs use): never run the wizard, never ask; use existing config and sweep; upload classified files only if `sweep.scheduler.unattendedUpload` is true; no config → no-op + log |
 | `immut status` | lastRunAt, objective, cadence, nextDueHint, dryRun, connectors, tools, keywords, initialSweep status |
 | `immut report` | Render the **last run** as a shareable standalone HTML report (protected / excluded+why / coverage). Does not re-scan. See § Protection report for the honesty rules. |
 | Store this file | One-off classify + file (or dry simulate) |
