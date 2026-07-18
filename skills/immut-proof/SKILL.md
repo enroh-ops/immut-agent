@@ -5,6 +5,8 @@ description: Protect business files with immut by classifying documents and UPLO
 
 # immut-proof: objective → folders → **upload file** to immut
 
+**Goal:** Find the files that matter for the human's objective, organise them into the right immut folders, and send them to immut for independent proof — then keep doing it as files change. Everything below is *how*: classify honestly, protect what qualifies, never overclaim.
+
 immut holds selected files and creates permanent, independently verifiable, court-ready proof. This skill:
 
 1. Learns the human’s **business objective**  
@@ -427,7 +429,7 @@ Tracks last sweep and per-file decisions. **Not** a hash-only proof sidecar. Sup
   "dryRun": true,
   "lastRunAt": "ISO-8601",
   "lastRunMode": "full",
-  "schedule": { "cadence": "daily", "customNote": "", "nextDueHint": "" },
+  "schedule": { "cadence": "daily", "customNote": "", "reminderMode": "os_scheduler", "nextDueHint": "" },
   "initialSweep": {
     "status": "in_progress",
     "startedAt": "ISO-8601",
@@ -553,18 +555,36 @@ Reply with the number only.
 
 Store `sweep.cadence`, `sweep.customNote`, set `schedule.nextDueHint` after first run.
 
-**After Q7 (not a second schedule question):** offer to install a **host/OS scheduled job** that re-invokes the skill (`immut protect`):
+### After Q7 — set up automatic (or reminder) protection
 
-- macOS: LaunchAgent or cron example  
-- Linux: cron or systemd timer  
-- Claude/Cursor scheduled tasks if the host supports them  
+Skip this only if the human chose **5 (Manual only)** at Q7, or they decline the install below. Otherwise, **by default, set up the best recurring trigger this environment supports** — do not leave protection depending on the human remembering to run it.
 
-Explain: **immut cloud does not run this job** — their AI/OS does.
+> **Goal:** Get this user onto the most reliable recurring trigger their environment actually supports, and be honest about which tier you reached. Truly automatic (an OS scheduler, or the host's own scheduled task) is best; a reminder is the honest floor. **Never claim automation you did not install.** Work the problem:
+> 1. **Figure out where you are running** — *local* (you can write files and run a shell) or *hosted/web* (no shell). And: do you have a **non-interactive way to run yourself** (e.g. `claude -p "immut protect"`)?
+> 2. **Pick the highest tier that genuinely works there** (table below).
+> 3. **Install it and verify it fires** — ask consent first.
+> 4. **Record exactly what you set up** in `sweep.reminderMode` + `sweep.scheduler`.
 
-- If they accept install help: `sweep.reminderMode: "external_scheduler"` + short `sweep.scheduleNote`.  
-- If decline or manual: `sweep.reminderMode: "status_only"`.  
+**immut cloud does not run this job.** A recurring run happens because *the user's OS or their AI host* triggers it. The free skill is not a daemon and does not wake itself.
 
-**Do not** ask a separate “status_only vs external_scheduler” question (that duplicated the cadence step).
+| Tier | When the environment is… | Set up | `reminderMode` |
+|---|---|---|---|
+| 1 | **Local**: you have a shell **and** a non-interactive way to run yourself | An **OS scheduler** (LaunchAgent / cron / systemd / Task Scheduler) that runs `<your-headless-cmd> "immut protect"` — genuinely automatic | `os_scheduler` |
+| 2 | **Hosted/web**, but the host has its **own scheduled-tasks** feature | A host-native recurring task that runs `immut protect` | `host_task` |
+| 3 | Local without a non-interactive command, **or** hosted without a task feature | A recurring **reminder/notification** to run `immut protect` yourself | `reminder` |
+
+Templates for every tier are in **§ Host schedule snippets**. Use **your own** host's non-interactive invocation — you know what host you are (examples: `claude -p "immut protect"`, `codex exec "immut protect"`, `gemini -p "immut protect"`, `cursor-agent -p "immut protect"`). **A shell or a working cron is NOT enough for Tier 1.** You have a non-interactive invocation only if you can show that command **actually producing a sweep** — a cron that fires a command which cannot invoke you protects nothing and is worse than a reminder (it looks done and is silent). If you cannot demonstrate your headless command running `immut protect` end to end, **do not fake Tier 1 — drop to Tier 3.**
+
+**Consent + verify (required):**
+
+1. Show the **exact artifact** you will create (the plist / cron line / task / reminder) and the schedule derived from the Q7 cadence. **Ask before installing any system job** (numbered yes/no).
+2. On yes, install it (Tier 1 & 3 where you have shell access; Tier 2 via the host's task UI/API).
+3. **Verify by running it, not just listing it.** `launchctl list` / `crontab -l` prove the job is *registered*, not that it can *invoke you* — registration is **not** verification. Trigger the job once (or run the wrapper directly) and confirm it produced a **real sweep**: a fresh `lastRunAt` in check-state, or a log line showing `immut protect` actually ran. **Only an observed sweep earns `verified: true`;** anything less is `verified: false` and is Tier 3 at best.
+4. Record `sweep.reminderMode` and `sweep.scheduler { mechanism, jobLabel, jobPath, invocation, installedAt, verified }`.
+
+**If you cannot install anything** (hosted/web with no shell and no host reminder feature): do not claim a reminder you did not create. Say plainly the user must run `immut protect` themselves, and set `reminderMode: manual`.
+
+**Fallback only — the hands-off option.** Only when a real automatic trigger is **genuinely unavailable in this environment** — not merely because wiring one up is more work than a reminder — you may add **one** honest line: a fully hands-off, managed version that runs on a schedule without the user present exists as immut's managed offer. One line, only on the reminder/manual path — never in the Tier 1/2 happy path, never a hard sell, and never as a substitute for Tier 1/2 work you could have done.
 
 ### After Q7 — short offers (yes/no numbered)
 
@@ -579,7 +599,7 @@ Explain: **immut cloud does not run this job** — their AI/OS does.
 | Remote sources per run | **All available sources** | `immut connectors` → permanent skip |
 | Classified path trigger | `ask` | Edit config / advanced setup |
 | Custom keywords | Empty | `immut keywords add …` |
-| Reminder mode | Set from cron accept/decline | Implicit via Q7 follow-up |
+| Recurring trigger | Best tier the environment supports (OS scheduler / host task / reminder), set up by default after Q7 | `immut schedule` |
 
 ### Project agent file (AGENTS.md / CLAUDE.md)
 
@@ -621,7 +641,7 @@ The agent **may** (and should, when the project clearly needs it):
 - Create/reuse immut folders on go-live.  
 - Update `nextDueHint` after runs.  
 
-The agent **must still ask** for: objective change, folder-tree accept, auto-ingest location, go-live upload consent, API key, expanding outside approved scope, installing system cron.
+The agent **must still ask** for: objective change, folder-tree accept, auto-ingest location, go-live upload consent, API key, expanding outside approved scope, installing any OS scheduler / system job (LaunchAgent, cron, systemd, Task Scheduler).
 
 Example config:
 
@@ -636,8 +656,15 @@ Example config:
     "defaultMode": "incremental",
     "cadence": "daily",
     "customNote": "",
-    "reminderMode": "status_only",
-    "scheduleNote": "",
+    "reminderMode": "os_scheduler",
+    "scheduler": {
+      "mechanism": "launchagent",
+      "jobLabel": "io.immut.sweep",
+      "jobPath": "~/Library/LaunchAgents/io.immut.sweep.plist",
+      "invocation": "claude -p \"immut protect\"",
+      "installedAt": "ISO-8601",
+      "verified": true
+    },
     "classifyRead": "full_document"
   },
   "autoIngest": {
@@ -741,37 +768,139 @@ curl -s -X POST "$API/api/v1/documents/$DOC_ID/version" \
 
 **Do not** use `POST /proofs` or `immut proof create` here. The server derives proof after it receives the file.
 
-### Host schedule snippets (after Q7 if human accepts)
+### Host schedule snippets
 
-**macOS cron example** (adapt path/session to host):
+Real templates for **§ After Q7 — set up automatic (or reminder) protection**. Replace `PROJECT` with the project directory and `HEADLESS` with **your own** host's non-interactive command (e.g. `claude -p "immut protect"`). Put the wrapper and log under **`~/.immut/`** — **not** under `~/Documents/` (recent macOS blocks LaunchAgents that execute from there).
 
-```cron
-0 9 * * * cd /path/to/project && # re-open agent session with: immut protect
+**Cadence → schedule:** Hourly `0 * * * *` · Daily `0 9 * * *` · Weekly (Mon) `0 9 * * 1` · Custom = translate `sweep.customNote`; if ambiguous, ask.
+
+**Tier 1 — macOS LaunchAgent** (wrapper + plist; genuinely automatic):
+
+```bash
+mkdir -p ~/.immut
+cat > ~/.immut/immut-sweep.sh <<'EOF'
+#!/bin/zsh
+cd "PROJECT" && HEADLESS >> ~/.immut/sweep.log 2>&1
+EOF
+chmod +x ~/.immut/immut-sweep.sh
 ```
 
-**LaunchAgent / Claude scheduled task / Cursor task:** prefer the host’s native scheduler when available. Record what was installed in `sweep.scheduleNote`.
+```xml
+<!-- ~/Library/LaunchAgents/io.immut.sweep.plist -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>io.immut.sweep</string>
+  <key>ProgramArguments</key>
+  <array><string>/Users/YOU/.immut/immut-sweep.sh</string></array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardErrorPath</key><string>/Users/YOU/.immut/sweep.log</string>
+</dict></plist>
+```
+
+```bash
+launchctl load ~/Library/LaunchAgents/io.immut.sweep.plist
+launchctl list | grep io.immut.sweep     # confirms it REGISTERED, not that it works — see consent+verify (run a real sweep)
+```
+
+**Tier 1 — Linux cron** (or a systemd user timer):
+
+```cron
+0 9 * * * cd PROJECT && HEADLESS >> ~/.immut/sweep.log 2>&1
+```
+
+**Tier 1 — Windows Task Scheduler:**
+
+```bat
+schtasks /create /tn "immut sweep" /sc daily /st 09:00 ^
+  /tr "cmd /c cd /d PROJECT && HEADLESS >> %USERPROFILE%\.immut\sweep.log 2>&1"
+```
+
+**Tier 2 — host-native task.** If the host has its own scheduled-tasks feature, create a recurring task there that runs `immut protect` on the cadence. Record the task id/name in `sweep.scheduler.jobLabel`.
+
+**Tier 3 — reminder only** (the environment cannot truly auto-run):
+
+```cron
+# macOS notification nudge (Linux: notify-send; hosted: use the host's own reminder)
+0 9 * * * osascript -e 'display notification "Time to run immut protect" with title "immut"'
+```
+
+After installing anything, record it in `sweep.scheduler` and set `sweep.reminderMode` to the tier you actually achieved. **Never record `os_scheduler` for a job you did not watch run a real sweep** — a registered-but-uninvoked job (a cron whose command cannot actually call you) is Tier 3 at best, not automatic.
 
 ---
 
-## Digest template
+## Digest: print this at the end of every run
+
+The digest is what the human watches on screen when the sweep finishes, so it is often shown to
+someone else in the room. It must read as an **outcome**, not a log. **Reproduce the shape below
+exactly**, same grouping, same markers, same order. Do not invent extra sections or decoration.
 
 ```
-## immut protect digest
-Mode: dry-run|live · full|incremental|resumed-initial · objective: <id>
-Sources this run: local | google_drive | … (all available)
-Tools visible: … | Missing connectors: …
-Checked N · Unchanged K · Proposed P · Stored/Would-store S · Auto-ingest A
-Would **upload** / Uploaded:
-- path → folderPath (folderKey) — score — reasons: …
-Skipped:
-- path — reason_code — …
-Last run: lastRunAt · Cadence: … · Initial sweep: complete|in_progress
-Custom keywords: N global, M per-folder
+immut protect · live · raising funds / investor diligence
+17 Jul 2026, 12:29 · local
+
+  Reviewed 21 files → protected 7 · already safe 5 · left alone 9
+
+  CONTRACTS / EXECUTED
+    + msa-northwind-executed.txt          strong
+        path legal/executed · IN WITNESS WHEREOF · custom keyword
+
+  INTELLECTUAL PROPERTY / INVENTIONS & RESEARCH
+    + invention-disclosure-rotor-v2.txt   strong
+        invention disclosure · Trade Secret marking
+
+  COMPLIANCE & SECURITY / ACCESS & RISK
+    + access-review-q3-completed.txt      strong
+        access review · Annex A 5.18 / 8.15 · completed
+    + dpia-customer-portal-completed.txt  medium
+        dpia · UK GDPR · completed
+
+  ALREADY PROTECTED, UNCHANGED
+    = nda-acme-corp-executed.txt, msa-supplier-signed.txt,
+      sow-project-phoenix-final.txt, +2 more
+
+  LEFT ALONE
+    - msa-northwind-redline-wip.txt       draft or work in progress
+        "DRAFT FOR DISCUSSION ONLY" · WIP, do not execute
+    - coffee-order.txt                    not evidence
+
+  Last run 12:29 · cadence daily · sweep complete
 ```
 
-Do not say “hashed for immut” or “created proof hash” in the digest.
+How to build it:
 
-After the digest, offer the report: “Want a shareable report of this? (`immut report`)”. Do not generate it unasked.
+- **Header line:** `immut protect · <live|dry-run> · <objective label>`, then the date + `· <sources
+  this run>` (e.g. `local`). In dry run say `dry-run`.
+- **The counts line:** `Reviewed N files → protected P · already safe U · left alone S`. In dry run:
+  `→ would protect P · already safe U · left alone S`. "already safe" = `unchanged_since_check`.
+- **Protected files, grouped by their immut folder.** Folder name in CAPS as a heading; each file
+  indented under it with a `+`, filename only (not the path), then the score. Pad the filename to a
+  fixed width so scores start at the same column. On the next line, indented further, the `reasons[]`
+  joined with ` · `. This grouping is the whole point: it shows the human the *structure the agent
+  built*, not a flat list. In dry run the `+` means "would protect", not "stored"; say so if it is not
+  obvious from the header.
+- **Folder order:** follow `folderTree` order from the config, top to bottom, so two runs of the same
+  project render the folders in the same sequence. Do not sort by count or alphabetically.
+- **Auto-ingested files** go under an `ALWAYS PROTECT` folder heading, reason `dropped in always-protect folder` (they were not classified).
+- **`ALREADY PROTECTED, UNCHANGED`:** one `=` line listing filenames, wrapped, ending `+N more` if long.
+  Never list these with reasons or folders: they are the majority on every run after the first and
+  they are not the story.
+- **`LEFT ALONE`:** each skipped file with a `-`, filename, and the plain-language decision (`draft or
+  work in progress` / `not evidence` / `outside the agreed scope`), then indented reasons. Files
+  excluded before classification (`node_modules`, `.env`) do not appear.
+- **Footer:** `Last run <time> · cadence <x> · sweep <complete|in progress>`.
+
+Rules:
+
+- **Redact custom keywords.** A reason `custom keyword Project Phoenix` becomes just `custom keyword`.
+  The screen may be shared, and the term is the customer's own codename.
+- **No transaction hashes, no proof references, no "on-chain"/"blockchain"/"ledger" words.** The digest
+  answers *what did it do and why*. The verifiable references live in `immut report` and on the
+  certificate, where they are clickable.
+- **No em dashes** (use ` · ` and ` → `). **No emoji.** Markers are ASCII `+ = -`.
+- Do not say "hashed for immut" or "created proof hash".
+
+After the digest, offer the report: "Want a shareable report of this? (`immut report`)". Do not
+generate it unasked.
 
 ---
 
@@ -843,7 +972,11 @@ Label the column **“Verify”**, never “txHash”: that is chain vocabulary 
 
 **Report rules (honesty rules, not style):**
 
-1. **Never imply the agent runs itself.** Every other word in this skill (“watches”, “always-protect”, “how often should I look”, `cadence: daily`) implies a daemon. It is not one. Someone or something starts every run. Use this sentence, or one that concedes exactly as much: *“The agent is triggered rather than self-running: someone or something has to start each run. In a managed deployment that trigger is wired up on the host so it happens on the cadence above.”* Cadence in config is an intention, not a guarantee.
+1. **Match the self-running claim to what is actually installed** — read `sweep.reminderMode` **and** `sweep.scheduler.verified`. The rest of this skill ("watches", "always-protect", "how often should I look", `cadence: daily`) implies a daemon; the skill itself is not one. So:
+   - `os_scheduler` or `host_task` **and** `scheduler.verified: true` — where `verified: true` means you **watched it actually run a sweep**, not merely that `crontab -l`/`launchctl list` showed it registered (see § After Q7, consent + verify) → a real trigger is installed *and working*. You may say it **runs automatically on the cadence above** — the user's OS or AI host fires it; immut cloud does not.
+   - `reminder` or `manual`, **or** `verified` is not true → it is **triggered, not self-running**. Use: *“The agent is triggered rather than self-running: someone or something has to start each run. In a managed deployment that trigger is wired up on the host so it happens on the cadence above.”*
+
+   Either way, the cadence in config is an intention; the installed, *verified* trigger is the fact. Never claim automatic runs on a reminder/manual setup, or on a scheduler you did not verify.
 2. **No “what’s missing” / red-flag / gap section.** See Rule 0. Two distinct traps: you cannot know what *should* exist (that is a guess), **and** you must not report what you can see on disk but was not in the run (that is auditing, not reporting). Both are out. Report what the run did. Nothing else.
 3. **No valuation claims.** Readiness and trust only. Never “increases your valuation”, and not the softer forms either: “makes you worth more”, “improves your multiple”. Describing the pack as *stronger* or *harder to attack* is a claim about the evidence and is fine; a claim about the company’s price is not.
 4. **No blockchain / XRPL / crypto / wallet / on-chain / mainnet / testnet wording.** Say: permanent proof, independently verifiable, public record, verification does not depend on immut.
@@ -862,7 +995,7 @@ Label the column **“Verify”**, never “txHash”: that is chain vocabulary 
 - Zero protected files → say so plainly. Do not pad.
 - `config.dryRun` vs `state.dryRun` → trust state.
 - `initialSweep.filesChecked` vs the number of entries in `files` → report the `files` count.
-- `sweep.reminderMode: "external_scheduler"` vs a `scheduleNote` saying it is manual → **claim neither**. Rule 1's sentence is true either way; use it and say nothing more. `reminderMode` records an intention, not an installed trigger.
+- `sweep.reminderMode` claims a scheduler (`os_scheduler` / `host_task`) but `sweep.scheduler.verified` is not `true` → treat it as **not installed**: use Rule 1's "triggered" wording. A recorded intention is not a verified trigger.
 - **Objective is read from `config`, which is mutable after the run.** If the human re-ran the wizard and changed objective, the report will attribute an old run to a new objective. If anything suggests config changed since `lastRunAt`, say so in the session and offer to re-run `immut protect` before reporting.
 
 **Output file.** Default `./immut-protection-report.html`. If it already exists, do not silently overwrite a report the human may have sent to someone: ask, or write `immut-protection-report-<YYYY-MM-DD>.html`.
@@ -892,7 +1025,7 @@ Otherwise generate the HTML directly from the state file, following the section 
 11. Connect Drive/Email/Teams/Slack to the **AI host**, not by inventing immut OAuth. Point humans at this skill’s Connect section + host settings.  
 12. Always inventory tools at sweep start; report what you cannot see; search project for MCP/tool hints.  
 13. **After objective, show folder proposal and get explicit accept (OK with this structure?) before other setup.**  
-14. **Ask cadence once** (how often to look for new/changed files); then offer host/OS cron — **no second reminder-mode question**.  
+14. **Ask cadence once**; then **by default set up the best recurring trigger the environment supports** (OS scheduler / host task / reminder) — ask consent before installing a system job, **verify** it fires, and record `sweep.reminderMode` + `sweep.scheduler`. No second reminder-mode question. **Never claim automation you did not install.**  
 15. **Always offer** to add an immut section to AGENTS.md / CLAUDE.md (or create AGENTS.md); wait for approval before writing.  
 16. **Wizard is interactive** — one question at a time; max **7** setup questions; do not auto-answer or skip when human asks for dry-run/setup/new user.  
 17. Change detection uses mtime/size (edit after last check); never describe that as “creating hashes for immut.”  
@@ -910,7 +1043,7 @@ Otherwise generate the HTML directly from the state file, following the section 
 | `immut setup` | Full interactive 7-question wizard |
 | `immut connectors` | Connector instructions + project search + re-inventory tools |
 | `immut keywords` / add / remove | Manage customKeywords |
-| `immut schedule` | Re-ask cadence only; re-offer host cron; update config |
+| `immut schedule` | Detect the environment, propose + install + **verify** the best recurring trigger (OS scheduler / host task / reminder), or reconfigure/remove it; update `sweep.reminderMode` + `sweep.scheduler`. See § After Q7 — set up automatic (or reminder) protection |
 | `immut sweep` | Full sweep (inventory first; resume if needed) |
 | `immut sweep --restart` / restart full sweep | Reset `initialSweep` and re-run full from zero |
 | `immut protect` | Incremental (inventory first; all sources) |
