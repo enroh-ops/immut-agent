@@ -56,14 +56,55 @@ The server creates the permanent proof after it receives the file. You do **not*
 
 ---
 
+## Connecting to immut (which API + key)
+
+The skill needs exactly **two** things to protect files: **what to scan** (the wizard) and **which immut API to push to**. The API is three values the operating-loop commands use as `$API`, `$KEY`, `$WS`:
+
+| Var | Meaning | Resolved from (first wins) |
+|---|---|---|
+| `$API` | immut **base URL** | `IMMUT_API_URL` env → `apiBaseUrl` in `immut.config.json` → default `https://backend.immut.io` |
+| `$KEY` | agent **API key** (secret) | `IMMUT_API_KEY` env → the project's gitignored `.env` |
+| `$WS` | **workspace id** | `IMMUT_WORKSPACE_ID` env → `workspaceId` in `immut.config.json` (chosen/verified at go-live) |
+
+**Local, staging or production — it does not matter.** The base URL is data. A key from `localhost:5000` and one from `https://backend.immut.io` look identical (`imut_test_…` vs `imut_live_…` is test/live, **not** an address), so the endpoint is supplied **with** the key — never guessed.
+
+### Go-live credential step — "paste what immut gave you"
+
+When going live (Q1 = live, or `immut protect` / `immut sweep` with no live credentials yet), ask the human **once**:
+
+> **Paste the agent connection from immut** (Organization Settings → AI Agents → *Connect an agent*). It looks like:
+> ```
+> IMMUT_API_URL=https://backend.immut.io
+> IMMUT_API_KEY=imut_live_…
+> IMMUT_WORKSPACE_ID=…
+> ```
+> Copying from a **local** immut fills in `http://localhost:5000`; from production, `https://backend.immut.io`. Either works.
+
+Accept the pasted block **or** the values one at a time. Then:
+
+1. **Secret → `.env` (never the config).** Write `IMMUT_API_KEY=…` to the project's `.env` and ensure `.env` is in `.gitignore` (create/append if missing). Say: *"wrote your key to `.env` and added it to `.gitignore`."* **Never** put the key in `immut.config.json`.
+2. **Endpoint + workspace → `immut.config.json`.** Set `apiBaseUrl` (if given) and `workspaceId` (if given). These carry no secret and are safe to commit.
+3. **Workspace: verify, then fall back.** With `$API`/`$KEY` set, confirm the pasted workspace via `GET $API/api/v1/workspaces`. If it isn't there, or none was pasted, use the go-live selection rule (0 → create, 1 → use it, >1 → ask) in § After Q7.
+4. **Env always wins.** If the human already exported `IMMUT_API_URL` / `IMMUT_API_KEY` / `IMMUT_WORKSPACE_ID`, use those and **skip the paste** (precedence above). This is how unattended/scheduled runs are configured.
+
+**Set the variables the API calls below use:**
+```bash
+API="${IMMUT_API_URL:-$(jq -r '.apiBaseUrl // "https://backend.immut.io"' immut.config.json 2>/dev/null || echo https://backend.immut.io)}"
+KEY="${IMMUT_API_KEY:-$(grep -E '^IMMUT_API_KEY=' .env 2>/dev/null | cut -d= -f2-)}"
+WS="${IMMUT_WORKSPACE_ID:-$(jq -r '.workspaceId // empty' immut.config.json 2>/dev/null)}"
+```
+
+**Dry run needs none of this** — no `$API`, `$KEY`, or `$WS`; it never touches the network.
+
+---
+
 ## Prerequisites
 
-**Dry run:** protection brief (objective + scope); no API.  
-**Live:**
+**Dry run:** protection brief (objective + scope); no API, no key, no endpoint.  
+**Live:** the three connection values (§ Connecting to immut) — **endpoint** `$API`, **agent key** `$KEY`, **workspace** `$WS` — plus upload consent. **No hash-only option** in this skill; only file upload.
 
-1. `IMMUT_API_KEY` with scopes: `documents:write`, `documents:read`, `folders:read`, `folders:write`, `certificates:read`, `workspaces:read` (add `workspaces:write` only if the agent should be able to **create** a workspace when the org has none). Prefer a **dedicated key named for the agent** (e.g. `immut-agent-skill`) so usage is easier to spot until platform agent-keys exist.  
-2. Workspace id — **chosen at go-live** from `GET /api/v1/workspaces` (0 → create one, 1 → use it, >1 → ask which; see § After Q7). Not guessed.  
-3. Upload consent. **No hash-only option** in this skill — only file upload.
+- **Key scopes:** `documents:write`, `documents:read`, `folders:read`, `folders:write`, `certificates:read`, `workspaces:read` (add `workspaces:write` only to let the agent **create** a workspace when the org has none). Prefer a **dedicated agent key** (Organization Settings → AI Agents), captured via the go-live paste and stored in `.env`.
+- **Workspace** — **chosen/verified at go-live** (pasted, then confirmed via `GET $API/api/v1/workspaces`; 0 → create, 1 → use, >1 → ask; see § After Q7). Not guessed.
 
 ---
 
@@ -615,7 +656,7 @@ NOT enough for Tier 1.** You have a non-interactive invocation only if you can s
 
 1. **Project agent file** — AGENTS.md / CLAUDE.md (see next section).  
 2. **First full sweep now?**  
-3. **Live only — pick the workspace, then build the folder tree** (do this on go-live):
+3. **Live only — pick the workspace, then build the folder tree** (do this on go-live; **first** ensure `$API`/`$KEY` are set from the pasted connection — § Connecting to immut — everything below uses them):
    1. **Choose the workspace.** `GET /api/v1/workspaces`. **0** → create one: `POST /api/v1/workspaces {name}` (name it for the objective, e.g. `immut — <objective label>`) and use it — **this needs the `workspaces:write` scope**; if the key lacks it you'll get `INSUFFICIENT_SCOPE`, so **fall back to asking the human to create a workspace in the app** (app.immut.io) and re-run. **1** → use it (say which). **>1** → **ask which** (numbered list per § Multiple-choice only) — this workspace is used for all ongoing sweeps. Store `workspaceId`. (Changing it later means re-running the folder ensure for the new workspace.)
    2. **Ensure + map the folder tree** in that workspace — see § Live folder create (use `parentFolder=all`; create missing; map every `folderKey → id` into `immutFolders`).
    Prefer the org **agent** API key from app.immut.io **Organization Settings → AI Agents** (not a generic Account integrator key).
@@ -648,7 +689,8 @@ After config exists, with the first-sweep offer:
 This project uses the **immut-proof** skill to classify and store important files on immut.
 
 - Skill: `npx skills add enroh-ops/immut-agent` or local skill file `skills/immut-proof/SKILL.md` (or host path)
-- Config: `immut.config.json` (objective, immut folder tree, auto-ingest, keywords, cadence, dryRun)
+- Config: `immut.config.json` (objective, `apiBaseUrl`, workspace, immut folder tree, auto-ingest, keywords, cadence, dryRun) — no secret, safe to commit
+- Secret: `.env` holds `IMMUT_API_KEY` (gitignored; never in `immut.config.json`)
 - State: `immut-check-state.json` (last run + resume cursor; do not commit if sensitive)
 - Commands: `immut setup` · `immut dry-run` · `immut sweep` · `immut protect` · `immut status` · `immut report` · `immut keywords` · `immut connectors` · `immut schedule`
 - Live: uploads to immut (`POST /documents` + folders). Dry-run: no upload.
@@ -678,6 +720,7 @@ Example config:
   "dryRun": true,
   "objective": { "id": "fundraise", "label": "Raising funds", "notes": "" },
   "workspaceId": "dry-run",
+  "apiBaseUrl": "https://backend.immut.io",
   "fetchCertificate": false,
   "projectAgentFile": "AGENTS.md",
   "sweep": {

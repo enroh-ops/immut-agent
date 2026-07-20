@@ -3,11 +3,12 @@
 Tools for using [immut](https://www.immut.io) from AI agents and terminals: classify important business files, organise them in immut folders, and store them with permanent, independently verifiable, court-ready proof.
 
 > **Agent summary**
-> - Install public skill: `npx skills add enroh-ops/immut-agent`
+> - Install public skill: `npx skills add enroh-ops/immut-agent` (production `main`; `…#dev` for the development branch)
+> - **Works against any immut instance** — local / staging / production. Endpoint + workspace + key are pasted at go-live (Organization Settings → AI Agents → Connect an agent); endpoint+workspace → `immut.config.json`, key → gitignored `.env`. Resolution: `IMMUT_API_URL` env → `apiBaseUrl` config → `https://backend.immut.io`.
 > - Public skill **uploads the file** to immut (`POST /api/v1/documents` + optional `folder`). **Never** hash-only `POST /proofs` / `immut proof create`.
 > - **Short setup (7 questions):** dry-run or live → **objective** → **accept immut folder proposal** → **connect tools to this AI** (Drive/Gmail/Teams/Slack) → **watch entire project (default)** → **always-protect drop folder** → **how often to look for new/changed files** → then **set up automatic protection** (OS scheduler / host task / reminder — any host, local or hosted) → offer AGENTS.md + first sweep
 > - Phrases: `immut dry-run` · `immut setup` · `immut connectors` · `immut keywords` · `immut schedule` · `immut sweep` · `immut protect` · `immut status` · `immut report`
-> - Live needs: API key, workspace id, human upload consent. Scopes: `documents:write`, `documents:read`, `folders:read`, `folders:write`, `certificates:read`, `workspaces:read`
+> - Live needs: endpoint (base URL), agent key, workspace id, human upload consent — the pasted connection covers all three. Scopes: `documents:write`, `documents:read`, `folders:read`, `folders:write`, `certificates:read`, `workspaces:read`
 > - Dry-run: no API key, no upload to immut; writes `immut.config.json` + `immut-check-state.json`
 > - Every sweep: inventory tools; search **all available sources**; resume incomplete initial check from check-state
 > - Full rules: [`skills/immut-proof/SKILL.md`](skills/immut-proof/SKILL.md)
@@ -61,10 +62,13 @@ You can skip this if you only want a **dry run** first.
 In Claude Code or another agent that supports skills:
 
 ```bash
-npx skills add enroh-ops/immut-agent
+npx skills add enroh-ops/immut-agent          # production (main)
+npx skills add enroh-ops/immut-agent#dev       # development branch (for testing new versions)
 ```
 
 Or point the agent at this repo’s skill file: `skills/immut-proof/SKILL.md`.
+
+**`main` is production; `dev` is where new versions are tested.** Most people install `main`. The skill works against **any** immut instance — local, staging, or production — because the endpoint travels with the key you paste at go-live (below).
 
 ### 3. Open the folder you care about
 
@@ -112,7 +116,15 @@ go live
 
 (or `immut setup` and choose live)
 
-Set `IMMUT_API_KEY` and workspace (env or config). Confirm that files **will be uploaded** to immut. Run:
+**Paste the agent connection from immut.** In immut → **Organization Settings → AI Agents → Connect an agent**, copy the block and paste it when the agent asks:
+
+```
+IMMUT_API_URL=https://backend.immut.io      # a local immut fills in http://localhost:5000
+IMMUT_API_KEY=imut_live_…
+IMMUT_WORKSPACE_ID=…
+```
+
+The agent stores the **endpoint + workspace** in `immut.config.json` (safe to commit) and the **key** in a gitignored `.env` (never in the config). Copying from a local immut points the skill at localhost; copying from production points it at production — same skill, no reconfiguring. Confirm that files **will be uploaded**, then run:
 
 ```text
 immut sweep
@@ -244,7 +256,7 @@ Recognition is heuristic. It is not legal or audit advice. **Protect = upload th
 
 ### `immut.config.json`
 
-Holds objective, `dryRun`, watch paths, folder tree, `autoIngest`, `customKeywords`, `connectors`, `immutFolders` (ids when live), sweep cadence. Examples in the monorepo under `webapp/agents/examples/` when developing alongside the webapp docs.
+Holds objective, `dryRun`, `apiBaseUrl` (which immut instance), `workspaceId`, watch paths, folder tree, `autoIngest`, `customKeywords`, `connectors`, `immutFolders` (ids when live), sweep cadence. **No secret** — the API key lives in `.env`, never here. Examples in the monorepo under `webapp/agents/examples/` when developing alongside the webapp docs.
 
 ### `immut-check-state.json`
 
@@ -256,7 +268,7 @@ Holds `lastRunAt`, `lastRunMode` (`full` \| `incremental`), per-file `mtimeMs`/`
 
 | | Dry run | Live |
 |---|---|---|
-| API key | Not required | Required |
+| Endpoint + API key | Not required | Required (pasted connection → `.env` + `apiBaseUrl`) |
 | Network | None | Folder create + document upload |
 | Output | Config + check-state + “would store” list | Files on immut in folders |
 | Purpose | Test skill and keywords safely | Real protection |
