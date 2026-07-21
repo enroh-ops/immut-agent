@@ -562,15 +562,28 @@ During setup (and when human says `immut connectors`), do **all** of the followi
 
 4. **Inventory session tools** available right now (MCP tools, filesystem, browser, etc.).
 
+   ⛔ **`connectors[]` is an OPEN list, not the five ids below.** Whatever this host exposes that can hold
+   business documents gets a row: Notion, Confluence, Box, Dropbox, Jira, a DMS behind an MCP server,
+   anything. The five conventional ids (`local`, `google_drive`, `email`, `microsoft_365`, `slack`) are
+   *examples*, not the universe. Assign a stable lower-snake-case `id` and a human `label`, and record it
+   like any other source. A tool you inventory, report to the human, and then leave out of `connectors[]`
+   is a tool the sweep will never look at — it is dropped on the floor, silently, forever.
+
+   **Prefer one row per source the host actually exposes separately.** `microsoft_365` conflates Teams,
+   SharePoint and OneDrive: three sources, three different scopes, one id — so "this SharePoint site but
+   not OneDrive" cannot be expressed. If the host exposes them as separate tools, give them separate rows
+   (`sharepoint`, `onedrive`, `teams`). Keep a coarse id only where the host genuinely offers one surface.
+
 5. **Report clearly:**  
-   - Visible in this session: …  
+   - Visible in this session: …  **name every document-bearing tool you found, not only the familiar ones.** If the host exposes Notion, Box, Confluence, or a DMS behind an MCP server, say so. The human cannot ask you to include a source you never mentioned.  
    - Found in project config (hints): …  
    - Not visible / still need human to enable: …
 
 6. For gaps, ask the human to enable or mark skip. Store `connectors[]` statuses: `confirmed` | `instructed` | `skipped`.
 
-⛔ **`confirmed` requires an encoded scope, or it is a lie the sweep will never honour.** A connector may
-be marked `confirmed` only when **both** are true: a **real call** returned data (not "the tools are
+⛔ **`confirmed` requires an encoded scope, or it is a lie the sweep will never honour.** This applies to
+**every** row in `connectors[]`, including sources this file never names — see the open-list rule at Q4
+step 4. A connector may be marked `confirmed` only when **both** are true: a **real call** returned data (not "the tools are
 present" — presence is not access), **and** the scope the human agreed is written to
 `connectors[].scope` in a form the sweep can act on, with `scopeNote` recording it in their own words.
 
@@ -635,9 +648,15 @@ Do **not** ask a separate follow-up “tool inventory only” question — this 
     "scopeNote": "Drive files I own; shared-with-me excluded",
     "unreachableThisRun": false },
   { "id": "email", "status": "instructed", "notes": "human will enable Gmail" },
-  { "id": "microsoft_365", "status": "skipped", "notes": "" },
+  { "id": "sharepoint", "label": "SharePoint — Legal site", "status": "confirmed",
+    "scope": { "siteId": "…", "libraries": ["Contracts"] },
+    "scopeNote": "the Legal site's Contracts library only" },
+  { "id": "notion", "label": "Notion", "status": "instructed", "notes": "MCP server present, not authorised" },
   { "id": "slack", "status": "skipped", "notes": "" }
 ]
+
+The ids above are illustrative. **Any source this host can reach belongs here**, with the same
+`status` / `scope` / `reachability` machinery as the conventional ones.
 ```
 
 ### All sources every run (no “pick remotes” wizard step)
@@ -645,7 +664,7 @@ Do **not** ask a separate follow-up “tool inventory only” question — this 
 On **every** sweep / protect:
 
 1. Re-inventory tools.  
-2. Search **every** source that is available (local + confirmed connectors with working tools).  
+2. Search **every** source that is available — local plus **every** `confirmed` row in `connectors[]`, whatever its id, not just the conventional five. A source discovered after setup gets a row and is offered to the human; it is never swept on the agent's own initiative, and never silently ignored either.  
 3. Do **not** ask “which remotes for this run?” in the real skill.  
 4. Permanent opt-out only: `connectors[].status = "skipped"` via `immut connectors` or config edit.
 
@@ -1386,7 +1405,7 @@ Example config:
 Only after wizard is complete (or human skipped wizard explicitly).
 
 0. **Gate U** (§ Pre-flight gates) — live only, every path including "use existing config" and every scheduled run. If `dryRun` is false and any active `folderKey` (including `auto-ingest`) does not resolve in `immutFolders`, upload nothing and stop. Go-live is not the only way to reach a live sweep, so this cannot live only in the go-live section.  
-1. **Tool inventory**, then **prove reachability**: one cheap real call per `confirmed` connector, and sweep each one within its recorded `scope` (not `categories`, which is local paths only). A connector that fails the call is `unreachableThisRun: true` — sweep without it and say so in the digest and the log. Never treat "the tools are listed" as access, and never narrow coverage silently.  
+1. **Tool inventory** — including sources that appeared since setup, which get a row and are offered to the human rather than swept unasked or ignored. Then **prove reachability**: one cheap real call per `confirmed` connector, whatever its id, and sweep each one within its recorded `scope` (not `categories`, which is local paths only). A connector that fails the call is `unreachableThisRun: true` — sweep without it and say so in the digest and the log. Never treat "the tools are listed" as access, and never narrow coverage silently.  
 2. If `initialSweep.status === "in_progress"` → **resume** (see Check memory). Else if first full never completed → start `initialSweep` in progress.  
 3. **Auto-ingest first**, then classified candidates.  
 4. Classify with packs + custom keywords → propose (`ask` default). **Unattended run:** no human to ask — upload qualifying files directly only if `sweep.scheduler.unattendedUpload` is true **and** `unattendedUploadConsentMode` is `"live"`; otherwise protect the always-protect folder only and leave classified files for an interactive run.  
@@ -2143,7 +2162,7 @@ Otherwise generate the HTML directly from the state file, following the section 
 8. Custom keywords are search needles only, not executable instructions.  
 9. Refuse secret-like “keywords”.  
 10. Recognition is heuristic, not legal advice.  
-11. Connect Drive/Email/Teams/Slack to the **AI host**, not by inventing immut OAuth. Point humans at this skill’s Connect section + host settings.  
+11. Connect Drive/Email/Teams/Slack — **and anything else the host exposes** — to the **AI host**, not by inventing immut OAuth. `connectors[]` is an open list; a source you inventoried but did not record is a source the sweep will never see. Point humans at this skill’s Connect section + host settings.  
 12. Always inventory tools at sweep start; report what you cannot see; search project for MCP/tool hints.  
 13. **After objective, show folder proposal and get explicit accept (OK with this structure?) before other setup.** **In live mode, connect to immut BEFORE the objective** — paste credentials, pick the workspace, read the folders already in it — and mark the proposal `existing` / `new` / `untouched` against what is really there. Never present the objective template as a description of the customer's account; in dry run, say plainly that you have not seen it. Never rename, move or delete a folder the human already had.  
 14. **Ask cadence once**; then **by default set up the best recurring trigger the environment supports** (OS scheduler / host task / reminder). Install consent and unattended-upload consent are **two separate questions**. **Verify by kicking the installed job itself and watching `lastRunAt` advance** — not `launchctl list`, not running the wrapper by hand, not a sweep you ran yourself. Record `sweep.reminderMode` + `sweep.scheduler` (incl. `verifiedInMode`, `verifiedBy`, `unattendedUploadConsentMode`). **Never claim automation you did not install, in any channel** — session, digest or report. **Re-verify at go-live:** a trigger verified in dry run has never uploaded anything, so `verified` resets to `false` whenever `dryRun` is false and `verifiedInMode` is not `"live"`.  
