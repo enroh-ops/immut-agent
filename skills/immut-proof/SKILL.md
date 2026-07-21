@@ -233,7 +233,7 @@ yet. Ask the human **once**:
 
 Accept the pasted block **or** the values one at a time. Then:
 
-1. **Secret → `.env` (never the config).** **Append/update** `IMMUT_API_KEY=…` in the project's `.env` (do **not** overwrite an existing `.env` — preserve other entries) and ensure `.env` is in `.gitignore` (create/append if missing). **Verify it is actually ignored:** the claim is authorised only when **both** `git check-ignore -q .env` **succeeds** (it matches an ignore rule) **and** `git ls-files --error-unmatch .env` **fails** (the file is not already tracked — a `.env` committed before the rule existed stays tracked and keeps being committed *despite* the pattern, so check-ignore alone is not enough). Do **not** accept a substring match in `.gitignore` (a commented `# .env`, or `.env.example`, does **not** ignore the file). Only then say *"wrote your key to `.env` and confirmed it is gitignored."* If `.env` is already **tracked**, warn the human that the key is exposed in git and must be rotated + untracked. If it is simply **not ignored**, fix `.gitignore` and re-check. If the project is **not a git repo**, say so and skip the ignore claim rather than asserting it. **Never** put the key in `immut.config.json`, and **never echo, quote, or summarise the key back** to the human or into any other file — acknowledge receipt without repeating its value.
+1. **Secret → `.env` (never the config).** **Append/update** `IMMUT_API_KEY=…` in the project's `.env` (do **not** overwrite an existing `.env` — preserve other entries) and ensure **both `.env` and `immut-reports/`** are in `.gitignore` (create/append if missing) — reports embed proof salts, which are verification keys, so they must never reach a repo that could go public. **Verify it is actually ignored:** the claim is authorised only when **both** `git check-ignore -q .env` **succeeds** (it matches an ignore rule) **and** `git ls-files --error-unmatch .env` **fails** (the file is not already tracked — a `.env` committed before the rule existed stays tracked and keeps being committed *despite* the pattern, so check-ignore alone is not enough). Do **not** accept a substring match in `.gitignore` (a commented `# .env`, or `.env.example`, does **not** ignore the file). Only then say *"wrote your key to `.env` and confirmed it is gitignored."* If `.env` is already **tracked**, warn the human that the key is exposed in git and must be rotated + untracked. If it is simply **not ignored**, fix `.gitignore` and re-check. If the project is **not a git repo**, say so and skip the ignore claim rather than asserting it. **Never** put the key in `immut.config.json`, and **never echo, quote, or summarise the key back** to the human or into any other file — acknowledge receipt without repeating its value.
 2. **Endpoint + workspace → `immut.config.json`.** Set `apiBaseUrl` (if given) and `workspaceId` (if given). These carry no secret and are safe to commit.
 3. **Workspace: verify, then fall back.** With `$API`/`$KEY` set, confirm the pasted workspace via `GET $API/api/v1/workspaces`. If it isn't there, or none was pasted, use the selection rule (0 → create, 1 → use it, >1 → ask) in § Connect first, then propose. Then **read the folders already in that workspace** — same section. Do this before the objective question.
 4. **Env always wins.** If the human already exported `IMMUT_API_URL` / `IMMUT_API_KEY` / `IMMUT_WORKSPACE_ID`, use those and **skip the paste** (precedence above). This is how a scheduled or headless/unattended invocation **supplies** its credentials (the scheduler or host injects the env; the skill does not invent them). An unattended run has **no human to say yes per file**, so it protects **only** within the scope the human already authorised at setup — and only when `sweep.scheduler.unattendedUpload` is true; it never widens scope on its own.
@@ -1283,7 +1283,8 @@ Only after wizard is complete (or human skipped wizard explicitly).
 5. **Dry run:** “Would **upload** into …” — no API.  
 6. **Live:** for each confirmed file (and all auto-ingest), **upload the file** via multipart `POST /documents`.  
 7. Persist check-state frequently; digest must list **sources used**. Never mention hash-only proofs.
-8. **If this run's invocation identifies itself as unattended/scheduled, write `sweep.scheduler.lastObservedFireAt` = now into `immut.config.json`.** This is the field's only writer, and § After Q7 step 5's staleness check is its only reader. Note it lives in **config**, while the installed invocation says "update check-state" — so writing it is a separate, deliberate act. Skip it and a trigger that died months ago keeps reporting as working.
+8. **Write the report** for the run that just finished, to `immut-reports/` (§ Protection report). Every sweep, no exceptions — dry run, live, interactive, unattended. Then name it, with the salt count, in the digest (or in the log when unattended).
+9. **If this run's invocation identifies itself as unattended/scheduled, write `sweep.scheduler.lastObservedFireAt` = now into `immut.config.json`.** This is the field's only writer, and § After Q7 step 5's staleness check is its only reader. Note it lives in **config**, while the installed invocation says "update check-state" — so writing it is a separate, deliberate act. Skip it and a trigger that died months ago keeps reporting as working.
 
 ### Live folder create — ensure the whole tree, map every id (canonical step 5)
 
@@ -1616,14 +1617,28 @@ Rules:
 - **No em dashes** (use ` · ` and ` → `). **No emoji.** Markers are ASCII `+ = -`.
 - Do not say "hashed for immut" or "created proof hash".
 
-After the digest, offer the report: "Want a shareable report of this? (`immut report`)". Do not
-generate it unasked.
+After the digest, **write the report** (§ Protection report) and name it on its own line. Every sweep,
+no exceptions: dry run or live, interactive or unattended, whether or not anything changed. The folder is
+the run history.
+
+```
+  Report: immut-reports/immut-protection-report-2026-07-21T113535Z.html
+          contains 7 proof salts · gitignored · do not publish
+```
+
+The salt line is **required whenever the report contains any**, and it carries the Rule 8 warning that
+used to be spoken before writing. Omit it only when the count is zero. An unattended run writes the same
+two lines to its log, since there is no session to say them in.
 
 ---
 
 ## Protection report (`immut report`)
 
-The digest is for the human in the session. The **report** is the artefact they hand to someone else: an investor, an acquirer, an auditor, a board. Generate it only when asked (`immut report`, “make me a report”, “something I can send my VC”).
+The digest is for the human in the session. The **report** is the artefact they hand to someone else: an investor, an acquirer, an auditor, a board.
+
+**Write one after every sweep, automatically.** Not only when asked. `immut report` still works and means
+"re-render the last run into a fresh file". This reverses an earlier rule ("generate it only when asked")
+deliberately — the reports folder is the run history, and a history with gaps in it is not one.
 
 ### Rule 0 — the state file is the whole world
 
@@ -1642,9 +1657,23 @@ If files have appeared since the last run, the honest response is to tell the hu
 
 **Input:** `immut-check-state.json` + `immut.config.json`. It reports the **last run**; it does not re-scan.
 
-**Output:** one standalone HTML file, default `./immut-protection-report.html`. Self-contained: styles inline, no external requests, no scripts.
+**Output:** one standalone HTML file at
+**`./immut-reports/immut-protection-report-<YYYY-MM-DD>T<HHMMSS>Z.html`** (UTC). Self-contained: styles
+inline, no external requests, no scripts.
 
-**Three sections, in this order. Do not add a fourth.** Rule 1's disclosure belongs inside section 3, not in a section of its own.
+Date first so the folder sorts chronologically; the time makes two runs on one day impossible to collide,
+which is why there is no longer any "ask before overwriting" rule — nothing is ever overwritten. One
+location and one naming rule for **every** report, automatic or manual.
+
+> ⛔ **`immut-reports/` must be gitignored.** Add it at setup alongside `.env`, and re-check before every
+> write. Every report embeds proof salts, and a salt is a verification **key** — Rule 8 forbids publishing
+> a salted report, and a report committed to a repo that later goes public is exactly that. If the project
+> is not a git repo, skip the claim rather than asserting it (same rule as `.env`).
+
+**Three content sections, in this order, then the technical appendix. Do not add a fourth *section*.**
+Rule 1's disclosure belongs inside section 3, not in a section of its own. The appendix (§ How to verify
+this yourself) is **not** a fourth section: it makes no claim about the customer's business, which is what
+that rule exists to prevent. It is method.
 
 1. **Heading depends on mode.** Live: “Protected and independently verifiable”. Dry run: “What the agent would protect” (the live heading is a false statement in dry run, so do not use it). List every file whose `decision` is `stored`, `unchanged_since_check`, or `dry_run_would_store`: its path, its immut `folderPath`, its `reasons` (see the redaction rule), a status from the table, and in live mode how a third party checks it. Head the reasons column **“Why it matched”**, not “why it qualified”: you are reporting what the classifier matched, not ruling on whether it deserves protection. Omit `score` unless the human asks; “weak match” next to a protected contract invites a question the report cannot answer.
 
@@ -1683,6 +1712,58 @@ If files have appeared since the last run, the honest response is to tell the hu
    **Do not print `schedule.nextDueHint`, and do not derive anything from it.** It is a future-tense promise sitting in a state file, and nothing guarantees it. “Next check due today” is the most natural, most factual-*feeling* lie this report can tell. Report when the agent last ran. Never when it will next run.
 
    **Do not report a zero as a finding.** “Auto-ingest: 0 files” is derivable from state and is therefore tempting, but a highlighted zero reads as a gap, which is Rule 2 by the back door. Counts of what happened, not counts of what did not.
+
+### Appendix — "How to verify this yourself"
+
+Include it whenever **any** row has a `transactionHash`. Omit it entirely in a dry run: there is nothing
+to verify, and printing a method with no data to run it on implies there is.
+
+> **Rule 4 carve-out, and it is deliberate.** Rule 4 bans blockchain / XRPL / on-chain / mainnet / testnet
+> wording from the report. **Inside this appendix those words are permitted**, because an instruction that
+> refuses to say *where the record is* cannot be followed, and "verification does not depend on immut" is
+> the strongest claim in the document — you cannot demonstrate it while hiding the mechanism. The
+> distinction the rules protect is **method versus claim**: this appendix asserts nothing about the
+> customer's business. The three content sections keep outcome language. Do not let this exception leak
+> upward into them, and do not delete this appendix citing Rule 4 or "no fourth section".
+
+**Open with what the reader needs**, all of it already in the section 1 table: the file, its transaction
+reference, its proof salt, and its scheme.
+
+**Salted schemes (`hmac-sha256-nonce-v2` / `-v3`) — four steps.** Print them as runnable commands:
+
+1. **Hash the file.** `shasum -a 256 <file>` (Linux: `sha256sum <file>`).
+2. **Commit it under the salt.** The published value is an HMAC of the file's digest, keyed by the salt —
+   which is why the record alone gives nothing away:
+   ```
+   shasum -a 256 <file> | cut -d' ' -f1 | xxd -r -p \
+     | openssl dgst -sha256 -mac HMAC -macopt hexkey:<salt> -hex
+   ```
+3. **Fetch the record from a public node — immut is not involved.**
+   ```
+   curl -s -X POST https://s.altnet.rippletest.net:51234/ \
+     -H 'Content-Type: application/json' \
+     -d '{"method":"tx","params":[{"transaction":"<transaction reference>"}]}'
+   ```
+   Mainnet: `https://s1.ripple.com:51234/`. Or open the explorer link beside the file in section 1.
+   Confirm `validated: true`.
+4. **Decode the memo and compare.** `Memos[0].Memo.MemoData` is hex-encoded JSON; decode it and read
+   `fileHash`. It must equal step 2's output.
+
+**`sha256-plain-v1`:** skip step 2 and compare step 1's digest directly with `fileHash`.
+
+**State plainly what this proves, and what it does not.** Matching values prove the file is byte-identical
+to the one protected, and the ledger's close time proves it existed no later than then. It does **not**
+prove who wrote it or who owns it. Put that limit here, beside the method, not only in the footer.
+
+**Privacy note worth making:** the memo carries the organisation name, domain and uploader as **hashes**,
+so the public record identifies nobody. That is also why the salt matters — without it the record cannot
+be tied to a file, by an investor or by anyone else.
+
+**Rule 9 applies here too.** On a test network, say in the appendix that these particular records are on a
+public test network which is periodically reset, so the method is sound but the permanence is not.
+
+**Include one worked example** using a real row from this run — its actual commands and expected output —
+so the reader can see what a match looks like before trying their own.
 
 **Reason codes. Use these words. Do not invent a translation from the code name.**
 
@@ -1732,13 +1813,15 @@ Label the column **“Verify”**, never “txHash”: that is chain vocabulary 
    Either way, the cadence in config is an intention; the installed, *verified* trigger is the fact. Never claim automatic runs on a reminder/manual setup, or on a scheduler you did not verify.
 2. **No “what’s missing” / red-flag / gap section.** See Rule 0. Two distinct traps: you cannot know what *should* exist (that is a guess), **and** you must not report what you can see on disk but was not in the run (that is auditing, not reporting). Both are out. Report what the run did. Nothing else.
 3. **No valuation claims.** Readiness and trust only. Never “increases your valuation”, and not the softer forms either: “makes you worth more”, “improves your multiple”. Describing the pack as *stronger* or *harder to attack* is a claim about the evidence and is fine; a claim about the company’s price is not.
-4. **No blockchain / XRPL / crypto / wallet / on-chain / mainnet / testnet wording.** Say: permanent proof, independently verifiable, public record, verification does not depend on immut.
+4. **No blockchain / XRPL / crypto / wallet / on-chain / mainnet / testnet wording in the three content sections.** Say: permanent proof, independently verifiable, public record, verification does not depend on immut. **The technical appendix is the one exception** (§ Appendix — "How to verify this yourself"), because a verification instruction that will not name the record cannot be followed. Method may name the mechanism; claims may not.
 5. **Do not assess adequacy.** Not an audit, not legal advice, no view on whether the IP, contracts, or compliance records are complete or sufficient. Say so in a short footer. A footer is not a fourth section: write it.
 6. **Do not overstate agent attribution.** If a run records that the upload came from an agent, that is an assertion recorded by immut’s backend, not cryptographic proof of who authored the file. Do not present it as proof of authorship.
 7. **Never invent a verification link, certificate id, transaction reference, count, or timestamp.** If the state file does not have it, it does not go in.
-8. **The report is itself disclosure, in two ways.** It names files like `invention-disclosure-*` and `trade-secret-*`, and it is built to be handed to outsiders. Before writing it, say in the session: *“This lists file paths and folder names, not contents. Worth a look before you send it.”* If the human wants paths redacted to filename only, do that.
+8. **The report is itself disclosure, in two ways.** It names files like `invention-disclosure-*` and `trade-secret-*`, and it is built to be handed to outsiders.
 
-   **And if it contains proof salts, say so separately and plainly.** A salt is a verification **key**: whoever holds this report plus a copy of the file can confirm the file is the protected one. That is exactly the point when sending it to a named investor, and it is exactly why it must not be published. Salts also give up the public record's privacy property for those files: anyone holding a salt can test a guessed file against the record. Tell the human the report contains N salts before they send it. Never post a salted report anywhere public.
+   **Reports are now written automatically after every sweep, so the warning moves rather than disappears.** It cannot be given "before writing" when writing is unattended. Instead: the digest (and, unattended, the log) names the file, states the salt count, and says gitignored, do not publish — every run. On an interactive `immut report`, also say *“This lists file paths and folder names, not contents. Worth a look before you send it.”* and offer to redact paths to filename only.
+
+   **The salt count is the part that must never be dropped.** A salt is a verification **key**: whoever holds this report plus a copy of the file can confirm the file is the protected one. That is exactly the point when sending it to a named investor, and exactly why it must not be published. Salts also give up the public record's privacy property for those files: anyone holding a salt can test a guessed file against the record. **Never post a salted report anywhere public**, and keep `immut-reports/` gitignored so it cannot happen by accident.
 
 9. **Never claim permanence for a proof on a test network — or on an unrecorded one.** This is **per row**, not per document: one null row must not silence the claim for every correctly recorded row, and one recorded row must not cover a null one. For a row whose `xrplNetwork` is null or missing, do **not** claim permanence: say the network was not recorded for it so permanence cannot be asserted, and tell the human in the session to re-check the upload response (this is exactly what the four-names trap produces, and § Recording the proof reference tells you to write `null` rather than guess — so null is *expected*, not exotic). Defaulting a missing value to the permanent claim is the single easiest way to hand an acquirer a document a technical reader can falsify in one lookup. If `xrplNetwork` is `testnet`, say the run was on a public **test network**, that such networks are periodically reset, and that proofs made there are **not permanent**. The verification works identically and the maths is the same; the permanence is not. This is the one claim a technical reader will check, and a demo is exactly where it gets made carelessly.
 
@@ -1751,7 +1834,7 @@ Label the column **“Verify”**, never “txHash”: that is chain vocabulary 
 - `sweep.reminderMode` claims a scheduler (`os_scheduler` / `host_task`) but `sweep.scheduler.verified` is not `true` → treat it as **not installed**: use Rule 1's "triggered" wording. A recorded intention is not a verified trigger.
 - **Objective is read from `config`, which is mutable after the run.** If the human re-ran the wizard and changed objective, the report will attribute an old run to a new objective. If anything suggests config changed since `lastRunAt`, say so in the session and offer to re-run `immut protect` before reporting.
 
-**Output file.** Default `./immut-protection-report.html`. If it already exists, do not silently overwrite a report the human may have sent to someone: ask, or write `immut-protection-report-<YYYY-MM-DD>.html`.
+**Output file.** `./immut-reports/immut-protection-report-<YYYY-MM-DD>T<HHMMSS>Z.html` (UTC), as set out under **Output** above. Every report gets its own timestamped file, so nothing is ever overwritten and there is nothing to ask about. Create `immut-reports/` if missing, and confirm it is gitignored before writing.
 
 A reference implementation lives in the immut monorepo at `scripts/immut-report.py` (not shipped to customers, immut-internal only). If the host has it:
 
@@ -1801,6 +1884,6 @@ Otherwise generate the HTML directly from the state file, following the section 
 | `immut sweep --restart` / restart full sweep | Reset `initialSweep` and re-run full from zero |
 | `immut protect` | Incremental (inventory first; all sources). **Interactive:** if config exists, may confirm existing-config vs re-wizard. **Unattended** (invocation says "unattended", or no human present — this is what scheduled jobs use): never run the wizard, never ask; use existing config and sweep; upload classified files only if `sweep.scheduler.unattendedUpload` is true **and** `unattendedUploadConsentMode` is `"live"`; no config → no-op + log |
 | `immut status` | lastRunAt, objective, cadence, nextDueHint, dryRun, connectors, tools, keywords, initialSweep status |
-| `immut report` | Render the **last run** as a shareable standalone HTML report (protected / excluded+why / coverage). Does not re-scan. See § Protection report for the honesty rules. |
+| `immut report` | Re-render the **last run** into a fresh timestamped file in `immut-reports/` (protected / excluded+why / coverage + the verification appendix). Does not re-scan. A report is written automatically after every sweep anyway; this is for re-issuing one. See § Protection report. |
 | Store this file | One-off classify + file (or dry simulate) |
 | Go live | Run **§ The canonical live setup sequence** from step 1, skipping only the wizard questions already answered. It is the single authority on order. Re-show Q3 unless `folderTreeAcceptedInMode` is already `"live"`, and re-verify any trigger installed in dry run |
