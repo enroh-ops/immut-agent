@@ -1,6 +1,6 @@
 ---
 name: immut-proof
-description: Protect business files with immut by classifying documents and UPLOADING them to immut (POST /documents multipart). Short setup wizard, objective folders, always-protect drop folder, connectors, dry-run, resume-safe sweep. NEVER use hash-only POST /proofs or immut proof create. Not fingerprint-only.
+description: Use when the human wants court-ready proof for important business documents — proving when a file existed and that it has not changed; getting ready for investor diligence, a fundraise, an exit or a sale; building a data room or evidence pack; protecting contracts, IP or compliance records as evidence; or mentions immut at all. This is proof, not backup: there is no restore or file-recovery command. Also on "immut setup", "immut protect", "immut dry-run", "immut report". Classifies documents and UPLOADS them to immut (POST /documents multipart) with objective folders, always-protect drop folder, connectors, dry-run and a resume-safe sweep. If there is no immut.config.json yet, offer setup rather than waiting to be asked. NEVER use hash-only POST /proofs or immut proof create. Not fingerprint-only.
 ---
 
 # immut-proof: objective → folders → **upload file** to immut
@@ -23,6 +23,61 @@ Docs: https://www.immut.io/docs · keys: https://app.immut.io/account?tab=api-ke
 
 ---
 
+## First contact — the human should not have to know a command
+
+> ⛔ **Interactive runs only.** If the invocation says unattended/scheduled, or there is no human to
+> answer, **do not print any of this**. Follow § Wizard enforcement instead: no-op and log
+> `immut: no config, skipping unattended run`. A scheduled job that prints a numbered question is a job
+> that hangs forever, writing a prompt nobody reads into the log every morning — and the wrapper is
+> `cd "PROJECT" && HEADLESS`, so a moved or renamed project lands exactly here.
+
+**In an interactive run, if there is no `immut.config.json` in the project, say so and offer setup. Do
+not wait to be asked.** Someone who has just run `npx skills add enroh-ops/immut-agent` has no way to
+know that "immut setup" is the phrase, and nothing else in this file happens until they say it. That is
+a dead end, and it is the single most likely way a new install goes nowhere.
+
+**Offer only when it is relevant.** The description matches on words like "protect" and "safe", which
+appear constantly in ordinary engineering work. Offer when the human's request is about business
+documents, evidence, diligence, contracts, IP, compliance, or immut itself — **not** on an incidental
+"protect this function from null input" in an unrelated repo.
+
+Keep it to about three lines, then a numbered choice:
+
+```text
+This project isn't set up with immut yet. immut gives you permanent, independently verifiable proof of
+when a file existed and that it hasn't changed — useful for a fundraise, an exit, or compliance. I'd
+find the files that matter, organise them into immut folders, and keep it up to date as they change.
+I only read and upload copies; I never move or change your files.
+
+This is proof, not backup. immut holds a copy as evidence, but it is not a file-recovery system and
+you should not delete anything on the strength of it.
+
+Reply with the number only.
+
+1. Set it up — test locally first, nothing uploaded  (Recommended)
+2. Set it up — connect to immut and protect for real
+3. Not now
+```
+
+`1` → the wizard in dry-run mode · `2` → the wizard in live mode (which connects first, § Canonical
+sequence) · `3` → record the decline (below) and drop it.
+
+> ⛔ **`2` selects live mode. It is NOT upload consent.** It is not go-live upload consent and not
+> unattended-upload consent; both remain their own numbered questions (§ Canonical sequence step 4,
+> § After Q7 step 1), and Gate U still blocks every upload until `uploadConsent` is recorded. Writing
+> `uploadConsent: {given: true}` off this keystroke would upload the customer's whole project on the
+> first character they ever typed. Hard rule 16: one reply authorises exactly one thing.
+
+**Say it once, and make that stick across sessions.** On `3`, write `.immut-declined` (one line,
+ISO-8601 timestamp) in the project and add it to `.gitignore`. Do not offer again while that file exists;
+`immut setup` still works and removes it. **Do not** write an `immut.config.json` stub to record a
+decline — every "config exists" branch in this file would then treat the project as set up.
+
+Stay quiet when: config exists and `setupStage` is `complete`, `.immut-declined` exists, or this is an
+unattended run. A skill that re-offers itself every message is worse than one nobody found.
+
+---
+
 ## How protect works (read this first)
 
 | Mode | Agent **does** | Agent **must NOT** |
@@ -38,6 +93,13 @@ The server creates the permanent proof after it receives the file. You do **not*
 **Change detection (local only):** Prefer **`mtimeMs` + `sizeBytes`**. On each run, re-check a file only if last-modified time **or** size differs from check-state (or the file is new). Drive/Teams autosave is fine: we do **not** track every keystroke; we only care that **edit date is after the previous successful check**. Do **not** talk about “creating hashes for immut.”
 
 > ⚠️ **Round `mtimeMs` to a whole number, and never compare it with `===`.** Filesystems report sub-millisecond precision (`1783075142175.3188`) and a JSON round-trip does not preserve it (`1783075142175.319`). Exact equality then fails for **every** file on **every** run, so the agent silently re-uploads the entire project each time: duplicate proofs, and the customer's upload quota gone. Store `Math.round(mtimeMs)`, and when comparing, treat a difference **under 1ms as unchanged**. This is not hypothetical — it was caught in a live run on 2026-07-17 where all five already-protected files looked changed by 0.0002ms.
+>
+> ⚠️ **And do not solve that by throwing the precision away.** Reading mtime in **whole seconds**
+> (`stat -f %m`, `stat -c %Y`, then `×1000`) produces the identical disaster from the other direction: the
+> upload path stores `…917000`, the classify path stores `…917584`, they disagree by up to 999ms, and
+> every protected file looks changed on every future run. Read it once per file, with sub-second
+> precision, and reuse that one value everywhere — see § Live protect. Caught in a live run on
+> 2026-07-21.
 
 ---
 
@@ -578,7 +640,7 @@ For each in-scope file (not excluded, not unchanged on incremental):
 5. Score custom keywords (global + byFolder).  
 6. Pick best `folderKey` (highest score; specific folder beats parent; ties → ask).  
 7. Default trigger for classified paths: **`ask`** (unless config says otherwise).  
-8. Update check-state with `folderKey`, `folderPath` label, `reasons[]`, score, mtime, size.
+8. Update check-state with `folderKey`, `folderPath` label, `reasons[]`, score, and **the mtime/size read at § Live protect step 1 — never a fresh `stat`**. A second read is a second chance to disagree with the first, which is exactly how the whole-second truncation bug got in.
 
    ⛔ **Check-state entries are MERGED, never replaced.** The proof fields — `documentId`, `versionDocumentId`, `transactionHash`, `xrplNetwork`, `hashScheme`, `proofNonce`, `proofForMtimeMs`, `proofForSizeBytes`, `filedToRoot`, `unfiledByChoice` — are **carried forward unchanged** on every path that does not re-upload, and are written only by an actual upload. On a re-upload, re-record every one of them from that response; `filedToRoot` and `unfiledByChoice` included, or a previously root-filed file silently loses the flag and prints its intended `folderPath`. Rewriting an entry from the list above alone silently nulls them, which breaks two things at once: the `unchanged_since_check` gate in step 2 fails forever (so you re-upload the whole project every run), and § Protection report refuses to call the file protected because `documentId` is null. The file was protected. You just deleted the evidence.  
 9. **Dry run:** list **would upload into** folder; on confirm `decision: dry_run_would_store`. Never upload. Never `POST /proofs`.  
@@ -588,7 +650,9 @@ For each in-scope file (not excluded, not unchanged on incremental):
 
     ⛔ **Never carry a previous upload's proof reference onto new bytes.** The merge rule (step 8) preserves proof fields on paths that do not re-upload — a changed file **is** a re-upload, so its proof fields are replaced, not preserved. Get this wrong and the report names the current file, calls it Protected, and hands over a Verify link computed from the previous version. The one recipient who actually checks gets a mismatch and concludes the pack is fabricated. Sending a changed file to `POST /documents` instead of the version endpoint is the other half of the same trap: a second immut document for the same file, duplicate proofs, quota burned.
 
-    Handle whatever comes back — **201 is not the only response** (§ Upload responses).
+    Handle whatever comes back — **201 is not the only response** (§ Upload responses). Follow the
+    ordered procedure in **§ Live protect** rather than writing your own loop: it fixes the two silent
+    failures (whole-second mtime, and zsh's `path` variable emptying `PATH`) that have each cost a run.
 
     Then, as before: **upload the file** (multipart) with `folder` = `immutFolders[folderKey]`; `decision: stored` + `documentId`. If `immutFolders[folderKey]` is missing/unresolvable, use the **root fallback** (omit `folder`, set `filedToRoot: true`, report it) rather than losing the file — see § Live folder create. Never `POST /proofs`. Then **record the proof reference** (below) — without it nobody can verify anything, and `immut report` has nothing to show.
 
@@ -604,10 +668,10 @@ run sees the same difference, retries, fails again, and loops forever.
 | Response | What it means | `decision` | Also record |
 |---|---|---|---|
 | **201** | Stored, proof created | `stored` | the proof fields (below) |
-| **400 `FILE_ALREADY_REGISTERED`** (`POST /documents`) | These exact bytes are **already protected** in this org, under another path | `already_registered_elsewhere` | `documentId` = the response's **`existingDocumentId`**, and update mtime/size |
-| **400 "already been uploaded as a version"** (`POST /documents/:id/version`) | These bytes are already a version of this document | `unchanged_since_check` | update mtime/size so it is not retried |
-| **403 `IMMUT_UPLOAD_LIMIT`** | Plan quota exhausted | `upload_failed` | update mtime/size; tell the human plainly — this is the one failure they can act on |
-| **other 4xx / 5xx** | Did not store | `upload_failed` | update mtime/size; keep the status and message |
+| **400 `FILE_ALREADY_REGISTERED`** (`POST /documents`) | These exact bytes are **already protected** in this org, under another path | `already_registered_elsewhere` | `documentId` = the response's **`existingDocumentId`**, plus `proofForMtimeMs`/`proofForSizeBytes` and mtime/size from the **step-1 values** |
+| **400 "already been uploaded as a version"** (`POST /documents/:id/version`) | These bytes are already a version of this document | `unchanged_since_check` | mtime/size from the **step-1 values**, so it is not retried |
+| **403 `IMMUT_UPLOAD_LIMIT`** | Plan quota exhausted | `upload_failed` | mtime/size from the **step-1 values**; tell the human plainly — this is the one failure they can act on |
+| **other 4xx / 5xx** | Did not store | `upload_failed` | mtime/size from the **step-1 values**; keep the status and message |
 
 **`already_registered_elsewhere` is a PROTECTED row, not a failure.** The file genuinely has a proof;
 immut just refused a second copy of identical bytes. It carries a real `documentId`, so it belongs in
@@ -756,6 +820,35 @@ forward untouched.
 **"7 questions" means seven *configuration* questions (Q1–Q7).** Consents are separate and are never
 merged into them or into each other — see Hard rule 16. Do not compress a consent into a wizard answer
 to stay under the number.
+
+**Write `immut.config.json` at three checkpoints, not after every answer.** Hold answers in memory and
+persist at:
+
+1. **After Q3 accept** — objective, `folderTree`, `folderTreeAcceptedAt/InMode/ShownAsProposed`, plus the
+   connection fields and `workspaceFolderInventory` already written at § Connect first.
+2. **After Q7** — connectors, watch scope, auto-ingest, cadence.
+3. **After go-live** — `uploadConsent`, `immutFolders`, `sweep.scheduler`.
+
+**These lists say *when* to write, not the whole field set.** At each checkpoint persist **every** field
+that § What must survive a run attributes to a step at or before it — including
+`folderTreeAcceptedWithUnverified` at checkpoint 1 and `unmappedByChoice` at checkpoint 3. A field with a
+writer that never runs is the failure mode that has bitten this file repeatedly.
+
+**Write `setupStage` in the same write: `"q3"`, `"q7"`, then `"complete"`.** Without it, batching creates
+a silent dead end: an interrupt between Q3 and Q7 leaves a config that *exists* but has no `categories`,
+no `autoIngest`, no `sweep`, no `uploadConsent`. § First contact tests for the file, so it never offers
+again; the human accepted a folder tree and is then never prompted, permanently. `setupStage` is the
+resume point that makes the checkpoints mean something:
+
+- § First contact fires when there is no config **or** `setupStage` is not `"complete"` — reworded to
+  *"setup was interrupted after Q3, shall I pick it up at Q4?"*
+- § Wizard enforcement's "no **complete** config" means exactly this test, not a separate judgement.
+- An unattended run with `setupStage` incomplete is **not** a usable config: no-op and log, as if absent.
+
+A live setup produced **ten** read-modify-write round trips on a file only the agent reads; three is
+enough. Do not re-read the config you just wrote. (`immut keywords` is exempt — standalone command,
+persists immediately. `immut-check-state.json` is unaffected: § Resume rules still persists it after
+each file.)
 
 **Interactive:** one question at a time; wait for answers (see Wizard enforcement).
 
@@ -1294,22 +1387,85 @@ unfiled until the human re-runs go-live/setup.
 
 ### Live protect = upload file only (the only protect API)
 
+**Follow this procedure. Do not invent your own upload loop.** Two real bugs came from agents writing
+their own, and both failed *silently* — the upload appeared to do nothing, or it appeared to succeed and
+quietly guaranteed a full re-upload the next day. Neither produced an error message.
+
+**Per file, in this order:**
+
+1. **Read `mtimeMs` and `sizeBytes` once**, before uploading, and reuse those exact values for both the
+   change check and the proof record. Two separate reads on two code paths is the whole bug.
+2. **Upload** — `POST /documents` for a new file, `POST /documents/<documentId>/version` when the
+   previous entry has a non-null `documentId` and the bytes changed (§ Classification step 10).
+3. **Branch on the response.** 201 is not the only outcome; a 400 is the normal path (§ Upload responses).
+4. **Fetch the salt in this same pass** when `hashScheme` is salted — not a second loop over the files
+   afterwards, which doubles the work for nothing. Against `versionDocumentId` on the `/version` path,
+   `documentId` on a first upload.
+5. **Write the state entry, and branch here too** — steps 3's non-201 outcomes still need Gate P's fields:
+   - **201** — all proof fields from the response, plus `proofForMtimeMs`/`proofForSizeBytes` from the
+     step-1 values.
+   - **400 `FILE_ALREADY_REGISTERED`** — `documentId` = the response's `existingDocumentId`, **and
+     `proofForMtimeMs`/`proofForSizeBytes` from the step-1 values**, then fetch the salt against that id.
+     The proof is real, so omitting those two fields would fail Gate P and print
+     `record incomplete, not verifiable` for a genuinely protected file — in section 1, contradicting
+     § Upload responses, which calls this a protected row. Duplicate content arrives constantly, so this
+     branch is common, not exotic.
+   - **403 / other** — `upload_failed`, mtime/size from the step-1 values, no proof fields.
+
+> ⚠️ **Read mtime with sub-second precision, or you re-upload everything tomorrow.** `stat -f %m` (macOS)
+> and `stat -c %Y` (GNU) return **whole seconds**, so `×1000` yields `…917000` while the file is really
+> `…917584`. The classify path typically reads it with full precision, so the two disagree by up to 999ms
+> — far outside the 1ms tolerance — and **every protected file looks changed on the next run, forever**:
+> duplicate proofs, quota gone. Use `stat -f %Fm` (macOS), `stat -c %.9Y` (GNU), or portably
+> `python3 -c "import os,sys;print(round(os.path.getmtime(sys.argv[1])*1000))" <file>`.
+>
+> **Not `stat -c %.3Y`.** It truncates to milliseconds where full precision *rounds*, so the two differ
+> by exactly 1ms whenever the sub-millisecond part is ≥ 0.5 — about half of all files. With an exclusive
+> "under 1ms" tolerance that reads as changed, which is the same full re-upload by a subtler route.
+>
+> **The single storage rule, since the two callouts here talk about different things:**
+> **read** at full precision → **store** `Math.round(mtimeMs)` as whole milliseconds → **compare** with
+> a tolerance of **2ms or less counts as unchanged**. Two independently rounded reads of the same instant
+> can legitimately differ by 1ms, so an exclusive 1ms threshold is too tight to be safe.
+> This is the same failure as the sub-millisecond callout at the top of this file, reached by the
+> opposite mistake, and it was caught in a live run on 2026-07-21 only because a later sweep noticed the
+> upload path and the skip path had stored different precisions for the same files.
+
+> ⚠️ **Never name a shell variable `path` in zsh.** `path`, `fpath`, `cdpath` and `manpath` are tied to
+> `PATH`, `FPATH`, `CDPATH` and `MANPATH`. A `local path="$1"` inside a function **empties `PATH` for that
+> scope**, so `curl` and everything else fail "command not found" with no explanation, and the upload
+> silently does nothing. Use `file_path`, `target`, `f`. Also cost three debug cycles in the same run.
+
 ```bash
 # ONLY protect action for this skill — pushes the file to immut
 curl -s -X POST "$API/api/v1/documents" \
   -H "Authorization: Bearer $KEY" \
-  -F "file=@<path>" \
+  -F "file=@$FILE_PATH" \
   -F "workspace=$WS" \
   -F "folder=$FOLDER_ID"
 ```
 
-Version when content changed and `documentId` known:
+Version when content changed and `documentId` known (note: **no `folder` parameter** — immut keeps the
+document where the first upload filed it):
 
 ```bash
 curl -s -X POST "$API/api/v1/documents/$DOC_ID/version" \
   -H "Authorization: Bearer $KEY" \
-  -F "file=@<path>"
+  -F "file=@$FILE_PATH"
 ```
+
+Salt, when `hashScheme` is `hmac-sha256-nonce-v2` or `-v3` — same pass, not a second sweep. **Fetch it
+against the id the proof was actually created for**, which is *not* `$DOC_ID` on the version path:
+
+```bash
+# PROOF_DOC_ID = versionDocumentId after a /version upload · documentId after a first upload
+curl -s "$API/api/v1/proofs/$PROOF_DOC_ID?includeSalt=true" -H "Authorization: Bearer $KEY"
+```
+
+> ⛔ Using `$DOC_ID` here after a `/version` upload pairs the **new** `transactionHash` with the
+> **previous** version's salt. Gate P still passes, so the report prints Protected with a Verify link,
+> and the first person who checks gets a mismatch. § Recording the proof reference and the carry-forward
+> contract both say `versionDocumentId` — match them.
 
 **Do not** use `POST /proofs` or `immut proof create` here. The server derives proof after it receives the file.
 
