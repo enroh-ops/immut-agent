@@ -10,6 +10,43 @@ version — this repo has no single repo-wide version.
 
 ## Unreleased (on `dev`)
 
+- **Connect to immut before proposing a folder structure (live).** The objective trees are templates.
+  Setup used to propose one at Q3 and not connect until after Q7, so the workspace was picked *after*
+  the human accepted a structure and existing folders were first read at ensure time — a customer who
+  had used the web app got a proposal that was a guess about their own account. Live setup now connects
+  between Q1 and Q2 (paste credentials, pick the workspace, read its folders at all depths, read-only),
+  and Q3 marks every node `existing` (file into it) / `new` (would create) / `untouched` (already
+  theirs, outside this objective, never renamed or deleted). Dry run still makes zero network calls and
+  must say plainly that it has not seen the account.
+- **A trigger verified in dry run is not a trigger verified.** Verifying while `dryRun: true` proves the
+  host can be invoked headlessly; it proves nothing about uploading. New `scheduler.verifiedInMode`
+  records which mode earned it, `verified` resets to `false` at go-live and must be re-earned against a
+  live sweep, and report Rule 1 falls back to "triggered, not self-running" until it is.
+- **Unattended-upload consent given in dry run is provisional** and is re-asked at go-live, alongside
+  upload consent. A yes given before the human has seen a single real upload does not authorise one.
+- **Exclude `.claude/`, `.cursor/`, `.agents/`, `.vscode/`, `.github/` before classification.** Skipped
+  files reach check-state and therefore reach report section 2, so the skill was listing its own
+  `SKILL.md` as "Deliberately excluded: not evidence" in a document written to be handed to an investor.
+- **The trigger-verification run is the first full sweep.** Do not also offer one; say the sweep
+  happened and show the digest. Only offer a first sweep when no trigger was installed.
+- **Handle non-201 upload responses.** New § Upload responses. A **400 `FILE_ALREADY_REGISTERED`** is the
+  normal path, not an exception: immut dedups by content hash at org level, and this skill's change check
+  is mtime-or-size, so byte-identical autosaves and duplicate copies arrive constantly. The 400 carries
+  `existingDocumentId`, so it is a **protected** row (`already_registered_elsewhere`), not a failure.
+  Genuine failures get `upload_failed` and appear in report **section 1** under "Attempted, not
+  protected" — never in section 2, which is headed "Deliberately excluded, and why". Every branch updates
+  mtime/size so a failed upload cannot retry forever.
+- **`/version` semantics corrected.** immut does not re-file on version upload (the version inherits
+  `parentDocument.folder` and the call takes no `folder`), so `folderKey`/`folderPath` carry forward and a
+  changed classification is raised in the session instead of silently rewritten. And `data._id` on a
+  version response is the version child, not the document — `documentId` stays the root, with the new
+  `versionDocumentId` alongside.
+- **Structure:** new § Pre-flight gates (five named gates — upload, unattended-classified, verify,
+  automation-claim, print-as-protected — each stating its threshold exactly once and failing closed),
+  § The canonical live setup sequence (the single authority on order, replacing three that disagreed),
+  and § What must survive a run (every carried field, its writer, its readers, and the failure if lost).
+  Produced by five adversarial cold-agent passes; see `webapp/agents/SKILL-MAINTENANCE.md` § Unreleased.
+
 - **Honesty hardening of the go-live credential prose** (3-pass cold-agent adversarial review).
   - Key host-safety: parse the URL host (the authority after any `@`, before the next `/`, `:` or `?`)
     and only send the API key to `https://` `immut.io` / `*.immut.io`, or a named `localhost`/`127.0.0.1`/
