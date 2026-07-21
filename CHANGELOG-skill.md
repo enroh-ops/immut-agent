@@ -17,6 +17,21 @@ version — this repo has no single repo-wide version.
   `immut-reports/` is gitignored at setup alongside `.env`, because every report embeds proof salts and a
   salt is a verification **key**. Rule 8's warning could no longer be spoken before writing once writing
   is unattended, so it moved: the digest, or the log, names the file and the salt count every run.
+- **The verification appendix now offers three routes, two of them needing no terminal.** A method the
+  recipient will not follow proves nothing, and most will not open a terminal. Route 1: immut's own
+  `/verify` page, deep-linked with `?tx=`, which hashes the file client-side — stated honestly as a
+  *convenience, not independence*, because the record it compares against comes from immut's API, with a
+  one-click cross-check. Route 2, independent: the explorer's **`/detailed`** tab (the default `Simple`
+  tab does **not** show memos) for the record and a human-readable timestamp, plus a CyberChef deep link
+  with the recipe and that row's salt pre-loaded. Route 3 is the original terminal steps.
+  Verified by hand: loading the real file into the generated CyberChef link returns exactly the
+  `fileHash` on the ledger, for two different rows.
+  Safety rule printed in all routes: **never use a general "online SHA-256" website** — most upload the
+  file, and sending a confidential document to a stranger to check a proof defeats the proof. Plus: once
+  a file is loaded, the CyberChef URL contains it, so the link must not be shared afterwards.
+- **Frontend `/verify` accepts `?tx=<hash>`** and auto-looks-up, so reports can link straight in rather
+  than making the reader hand-copy 64 hex characters. Only the tx comes from the URL — the file and the
+  salt stay manual, and a salt is a verification key that must never sit in a URL.
 - **New report appendix, "How to verify this yourself"** — hash the file, HMAC it under the salt, fetch
   the record from a public node, decode the memo, compare. States what a match proves (byte-identical,
   existed by then) and what it does not (authorship, ownership), plus the privacy point that the record

@@ -1761,6 +1761,84 @@ to verify, and printing a method with no data to run it on implies there is.
 **Open with what the reader needs**, all of it already in the section 1 table: the file, its transaction
 reference, its proof salt, and its scheme.
 
+Then offer **three routes, easiest first**. Most recipients will not open a terminal, and a verification
+method the reader will not follow proves nothing. Routes 1 and 2 need no terminal at all.
+
+> ⛔ **One safety rule, printed once, above route 1 and before any route.** Never use a general
+> "online SHA-256" website. Most of them **upload the file**, and sending the customer's contract to an
+> unknown third party in order to check a proof defeats the point of the proof.
+> Then the claim that is true of all three: **none of these routes uploads the file anywhere** — routes 1
+> and 2 hash it in the reader's browser, route 3 on their own machine, and only the transaction reference
+> ever crosses the network. Do **not** write "everything below runs in your browser": route 3 is a
+> terminal, and a false safety claim in a safety warning is worse than none.
+
+### Route 1 — no terminal, quickest
+
+immut's verify page: `<app>/verify` — paste the transaction reference (pre-filled if the report links it
+with `?tx=`), choose the file, paste the proof salt. **The file is hashed on the reader's own device and
+is never uploaded.**
+
+**State the limit in the same breath, do not bury it.** The record it compares against comes from
+immut's API, **and the page reports only a yes or no — it never shows `fileHash`**, so there is nothing
+to eyeball against the explorer. Do **not** write "one extra click closes it": closing the gap means
+doing route 2 *in full*. Say: *"Route 1 on its own is immut telling you the answer."*
+
+⛔ **Do not print route 1 for a row on a test network.** The verify page's footer asserts
+"Proofs are permanently recorded on the public XRP Ledger" unconditionally, which contradicts this
+report's own test-network notice. A link that argues with the document carrying it is worth less than
+the convenience.
+
+**Scheme-conditional, like route 3.** Salted row: name the field the page actually uses — **Proof
+nonce**, not "salt". Plain row: no salt is needed at all, so do not ask for one. No salt recorded on a
+salted row: do not offer route 1 for it.
+
+### Route 2 — no terminal, and independent of immut
+
+**Step 1 — the record and the time.** Open the **Public record** link, which points at the explorer's
+**Detailed** tab. Two things are on that page and neither needs any conversion:
+- `Memos (Decoded Hex)` — the JSON, with `fileHash` readable on screen.
+- The Status line — the validated ledger and a human-readable UTC timestamp.
+
+Link `/detailed` specifically, and tell the reader to select the **Detailed** tab if the page does not
+open on it. The default **Simple** tab does **not** show memos, and a reader who lands there sees no
+`fileHash` and concludes the reference is empty. (Note the backend's own `utils/explorerUrls.js` appends
+`/detailed` on mainnet only — `/detailed` was confirmed working on testnet by hand, but if a network
+serves no such tab, send the reader to route 3 step 5 instead.)
+
+**Say what step 1 does not prove.** It shows a record exists and when. It does not show it is *their*
+file — that is step 2, and a reader who stops at the satisfying explorer page has verified nothing about
+their document.
+
+**Step 2 — the hash and the HMAC.** Open the **Check this file** link. It opens CyberChef with the
+recipe and this row's salt already loaded: `SHA2(256)` → `From Hex` → `HMAC(key = the salt, as HEX)`.
+Load the file with **"Open file as input"** — the small folder icon at the **top-right of the Input
+pane** — or drag the file onto that pane. Name the control exactly: it is unlabelled, easy to miss, and
+vanishes entirely on a narrow window.
+
+The Output is the value to compare with `fileHash` from step 1. Equal means verified.
+
+**Tell the reader to check the recipe loaded.** Three operations, in order: `SHA2` (size 256),
+`From Hex`, `HMAC` with **Key: HEX** set to that row's salt. immut generated the link, so this is the
+check that makes the route independent — and if the recipe ever fails to load, the Output is silently the
+raw file instead. Anything else: build the three operations by hand, or use route 3.
+
+**Scheme-conditional.** Plain (`sha256-plain-v1`): link a `SHA2(256)`-only recipe, no salt, no HMAC.
+**Unrecorded scheme: link nothing.** `is_salted(null)` is false, so a naive check hands a v3 proof — the
+backend default — a plain recipe and guarantees a mismatch. A wrong recipe and a bad proof look identical
+to the reader, and the wrong-recipe case is the one that makes a genuine pack read as fabricated.
+
+> ⚠️ **Do not share that CyberChef link, before or after loading a file.** It already contains the proof
+> salt, which is a verification key — Rule 8 forbids publishing one — and once a file is loaded the URL
+> contains the file too, base64-encoded. The fragment is not *sent to the site*, but do not overclaim
+> that as "not disclosed to anyone": it sits in browser history (which browser sync may upload) and is
+> readable by anything running in that browser. The verify page refuses to take a salt from a URL for
+> exactly this reason; do not tell the reader it is safe here.
+
+CyberChef is open source and runs entirely in the browser. A reader who does not want to trust a website
+at all can use **Download CyberChef** (top-left) and run the same recipe offline.
+
+### Route 3 — terminal
+
 **Salted schemes (`hmac-sha256-nonce-v2` / `-v3`) — five steps.** Print them as runnable commands. The
 construction below is the backend's `utils/proofCrypto.js computeCommitment()`:
 `HMAC-SHA256(key = raw bytes of the hex salt, message = raw 32 digest bytes)`. **v2 and v3 use the same
