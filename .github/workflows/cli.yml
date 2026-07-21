@@ -1,0 +1,56 @@
+# CI for the immut CLI component only.
+#
+# Path-scoped on purpose: the skill and the CLI live in this one repo but release independently
+# (tags `skill-vX.Y.Z` / `cli-vX.Y.Z`). A skill-only change must not run — or fail — this pipeline.
+# See webapp/agents/ARCHITECTURE.md § Independent release model.
+name: cli
+
+on:
+  push:
+    paths:
+      - 'cli/**'
+      - '.github/workflows/cli.yml'
+  pull_request:
+    paths:
+      - 'cli/**'
+      - '.github/workflows/cli.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Matches package.json engines.node >= 20 exactly: the advertised floor is the tested floor.
+        # (The floor was raised from 18 — it is EOL and node:test's programmatic API is only reliably
+        # stable from 20, so advertising 18 would have been an untested claim.)
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # No install step: the CLI has zero dependencies (and no lockfile) by design.
+      - name: Assert the zero-dependency property still holds
+        working-directory: cli
+        run: |
+          node -e "
+            const p = require('./package.json');
+            const deps = Object.keys(p.dependencies || {});
+            const dev = Object.keys(p.devDependencies || {});
+            if (deps.length || dev.length) {
+              console.error('CLI must stay dependency-free. Found:', { deps, dev });
+              process.exit(1);
+            }
+            console.log('ok: no dependencies');
+          "
+
+      - name: Run CLI tests
+        working-directory: cli
+        run: npm test

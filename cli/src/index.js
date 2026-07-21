@@ -5,8 +5,9 @@
  * immut CLI: the proof layer for digital files, from any terminal or agent session.
  *
  * Zero runtime dependencies (Node >= 18: built-in fetch, crypto, streams).
- * File contents NEVER leave this machine: files are hashed locally with SHA-256
- * and only the hex digest is sent to immut.
+ * File CONTENTS never leave this machine: files are hashed locally with SHA-256 and only the hex
+ * digest is sent — along with the file NAME and SIZE (and --description if given), which are stored
+ * as metadata. Do not describe this as "only the digest is sent": that is not true.
  *
  * Config (environment):
  *   IMMUT_API_KEY       Bearer key created at https://app.immut.io/account?tab=api-keys
@@ -102,6 +103,37 @@ function sidecarPath(filePath) {
   return `${filePath}.immut.json`;
 }
 
+/**
+ * Honesty guard: a test-network record is an impermanent DEMONSTRATION, not court-ready evidence.
+ * The user reads the terminal line, not the docs, so every result that names a non-production network
+ * must say so on the spot. Returns null when the record is on the permanent production network.
+ */
+function networkCaveat(network) {
+  const n = String(network || '').toLowerCase();
+  // Unknown network must fail closed: never imply permanence we cannot evidence.
+  if (!n) return 'NETWORK UNKNOWN: treat this record as NOT permanent until you confirm the network.';
+  if (n.includes('main') || n.includes('prod')) return null;
+  return 'DEMONSTRATION ONLY: test-network records are impermanent and are not court-ready evidence.';
+}
+
+/** Append the caveat to a human-readable block when the record is not on the production network. */
+function withCaveat(lines, network) {
+  const note = networkCaveat(network);
+  return note ? `${lines}\n${note}` : lines;
+}
+
+/**
+ * Carry the same permanence signal into --json. Scripts and agents read the JSON, not the prose, so
+ * every honesty warning shown to a human must exist as a machine-readable field too — otherwise a
+ * pipeline can file a test-network record as evidence with no signal at all.
+ */
+function withPermanence(obj, network) {
+  const caveat = networkCaveat(network);
+  const out = { ...obj, network: network || obj.network || null, permanent: !caveat };
+  if (caveat) out.caveat = caveat;
+  return out;
+}
+
 // ── commands ────────────────────────────────────────────────────────────────────
 
 async function cmdHash(args) {
@@ -168,7 +200,7 @@ async function cmdProofCreate(args) {
     lines.push('  KEEP THE NONCE: it is required to verify this proof (also embedded in the certificate PDF).');
   }
   if (file && flags.sidecar) lines.push(`  sidecar:   ${sidecarPath(file)}`);
-  output(record, flags, lines.join('\n'));
+  output(withPermanence(record, d.ledger), flags, withCaveat(lines.join('\n'), d.ledger));
 }
 
 async function cmdStatus(args) {
@@ -179,15 +211,18 @@ async function cmdStatus(args) {
   const res = await api('GET', `/api/v1/proofs/${id}${q}`);
   const d = res.data;
   output(
-    d,
+    withPermanence(d, d.ledger),
     flags,
-    [
-      `status:  ${d.blockchainStatus}`,
-      `ledger:  ${d.ledger}`,
-      `txHash:  ${d.txHash}`,
-      `verify:  ${d.verifyUrl}`,
-      `scheme:  ${d.hashScheme}`,
-    ].join('\n')
+    withCaveat(
+      [
+        `status:  ${d.blockchainStatus}`,
+        `ledger:  ${d.ledger}`,
+        `txHash:  ${d.txHash}`,
+        `verify:  ${d.verifyUrl}`,
+        `scheme:  ${d.hashScheme}`,
+      ].join('\n'),
+      d.ledger
+    )
   );
 }
 
@@ -199,18 +234,62 @@ async function cmdVerify(args) {
   const res = await api('GET', `/api/public/verify/${txHash}`, { auth: false });
   const d = res.data;
   if (!d.verified) {
-    output({ verified: false, ...d }, flags, `NOT VERIFIED: transaction not confirmed on ${d.network || 'any supported ledger'}`);
+    // Do NOT assert the record is absent: the API also returns verified:false when it simply could
+    // not reach the ledger, so "not confirmed" would be a claim we cannot support.
+    // The network in the response is a default/guess when nothing was found — do not name it as if
+    // we searched only there and concluded absence.
+    output(
+      withPermanence({ ...d, verified: false, fileChecked: false, fileMatches: null }, d.network),
+      flags,
+      'NOT VERIFIED: no confirmed record found for this transaction on any network immut could reach ' +
+        '(it may not exist, or the record could not be read — try again)'
+    );
     process.exit(1);
   }
 
   if (!flags.file) {
-    output(d, flags, `on-chain record verified on ${d.network} (ledger ${d.ledgerIndex}, closed ${d.ledgerCloseTime})\nto check a file matches, re-run with --file <path> (and --nonce <hex> for salted proofs, or keep the .immut.json sidecar next to the file)`);
+    const where = d.ledgerIndex != null && d.ledgerCloseTime
+      ? ` (ledger ${d.ledgerIndex}, closed ${d.ledgerCloseTime})`
+      : '';
+    // fileChecked/fileMatches must be explicit: a script keying on `verified` would otherwise get a
+    // green light for a file this command never looked at.
+    output(
+      withPermanence({ ...d, fileChecked: false, fileMatches: null }, d.network),
+      flags,
+      withCaveat(
+        `record confirmed on ${d.network}${where}\n` +
+          'NOTE: no file was checked. This only confirms the record exists — re-run with --file <path> ' +
+          '(and --nonce <hex> for salted proofs, or keep the .immut.json sidecar next to the file) to ' +
+          'check a file against it.',
+        d.network
+      )
+    );
     return;
   }
 
   const fileHash = await sha256File(flags.file);
   const scheme = (d.memo && d.memo.hashScheme) || 'sha256-plain-v1';
   const onChain = String((d.memo && d.memo.fileHash) || '').toLowerCase();
+
+  // The API can report verified:true without returning the stored hash (e.g. the record was located on
+  // a different network via fallback). Without it we cannot compare anything — say so, rather than
+  // printing MISMATCH and telling the user their file may have been altered.
+  if (!onChain) {
+    output(
+      withPermanence(
+        { verified: true, fileChecked: false, fileMatches: null, reason: 'record hash unavailable' },
+        d.network
+      ),
+      flags,
+      withCaveat(
+        'CANNOT CHECK: the record was confirmed, but its stored hash was not returned, so this file ' +
+          'could not be compared against it. This is NOT a mismatch — try again, or check the ' +
+          'certificate PDF.',
+        d.network
+      )
+    );
+    process.exit(1);
+  }
 
   let computed;
   if (scheme === 'sha256-plain-v1') {
@@ -233,13 +312,23 @@ async function cmdVerify(args) {
   }
 
   const match = computed === onChain;
-  const result = { verified: true, fileMatches: match, network: d.network, ledgerIndex: d.ledgerIndex, ledgerCloseTime: d.ledgerCloseTime, scheme };
+  const result = withPermanence(
+    { verified: true, fileChecked: true, fileMatches: match, ledgerIndex: d.ledgerIndex, ledgerCloseTime: d.ledgerCloseTime, scheme },
+    d.network
+  );
+  // Only state the time/ledger when we actually have them — otherwise this prints "at null".
+  const when = d.ledgerCloseTime
+    ? ` recorded at ${d.ledgerCloseTime}${d.ledgerIndex != null ? ` (${d.network}, ledger ${d.ledgerIndex})` : ` (${d.network})`}`
+    : ` (${d.network})`;
   output(
     result,
     flags,
-    match
-      ? `MATCH: file existed unchanged at ${d.ledgerCloseTime} (${d.network}, ledger ${d.ledgerIndex})`
-      : 'MISMATCH: the file does not match the on-chain record (file changed, wrong file, or wrong nonce)'
+    withCaveat(
+      match
+        ? `MATCH: this file is the one${when} — it existed in this exact form no later than then.`
+        : 'MISMATCH: this file does not match the stored record (file changed, wrong file, or wrong nonce)',
+      d.network
+    )
   );
   process.exit(match ? 0 : 1);
 }
@@ -263,7 +352,8 @@ async function cmdWorkspaces(args) {
 
 function cmdHelp() {
   process.stdout.write(`immut: the proof layer for digital files
-File contents never leave this machine; only the SHA-256 hash is sent.
+File CONTENTS never leave this machine. What is sent: the SHA-256 digest, the
+file name, the file size, and any --description you pass (stored as metadata).
 
 Usage:
   immut hash <file>                                   print the local SHA-256 (no network)
@@ -271,11 +361,27 @@ Usage:
   immut proof create --hash <64-hex>                  anchor a proof from a precomputed hash
         [--name <str>] [--description <str>] [--workspace <id>]
   immut status <proofId> [--include-salt]             poll proof status
-  immut verify <txHash> [--file <path>] [--nonce <hex>]   verify (keyless; exit 0 match, 1 mismatch)
-  immut cert <proofId> [-o out.pdf]                   download the court-ready certificate
+        --include-salt also returns the proofNonce ("Proof Salt" on the
+        certificate) needed to check a file against a salted proof
+  immut verify <txHash> --file <path> [--nonce <hex>] check a file against the record
+        (no API key needed for this command)
+        WITHOUT --file nothing about a file is checked: it only confirms the
+        record exists, and still exits 0. Always pass --file in scripts.
+  immut cert <proofId> [-o out.pdf]                   download the proof certificate (PDF)
   immut workspaces                                    list workspaces (setup)
 
-Every command accepts --json for machine-readable output.
+Exit codes: 0 success (for verify --file: this file matches) · 1 mismatch,
+unverified, not checkable, or a usage error · 2 API error · 3 rate limited.
+Exit 1 does NOT mean "tampered" on its own -- read the message.
+
+Every command accepts --json for machine-readable output. Proof results carry
+"permanent": true|false and a "caveat" string, so scripts get the same warning
+as humans.
+
+Which network a proof lands on is decided by your immut plan and org settings,
+not by your API key. A production-network proof is a permanent public record; a
+test-network proof is an impermanent demonstration. Trust the network named in
+the result.
 
 Environment:
   IMMUT_API_KEY        API key (create at https://app.immut.io/account?tab=api-keys)
