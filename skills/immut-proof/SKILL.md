@@ -467,7 +467,9 @@ Use **path/filename + full document text** (see Classification). Score: **strong
 
 ### Exclusions (never auto-propose)
 
-`.git/`, `node_modules/`, `dist/`, `build/`, caches, `*.tmp`, `~$*`, `.DS_Store`, `immut.config.json`, `immut-check-state.json`, `*.immut.json`, `.env`, `*.pem`, keys. Under finalisation-style skip for **classified** paths: `*draft*`, `*wip*`, `*todo*` unless human forces path. **Auto-ingest path:** never skip for draft/wip — always store if new/changed.
+`.git/`, `node_modules/`, `dist/`, `build/`, caches, `*.tmp`, `~$*`, `.DS_Store`, `immut.config.json`, `immut-check-state.json`, `*.immut.json`, **`immut-reports/`**, **`immut-protection-report-*.html`**, `.env`, `*.pem`, keys.
+
+> ⛔ **`immut-reports/` must be excluded here, not merely gitignored.** Gitignore is not scan exclusion. Reports quote `reasons` verbatim — `IN WITNESS WHEREOF`, `invention disclosure`, `Trade Secret marking`, `Annex A 5.18` — so a report is a *strong* multi-cue match against the Contracts and IP packs. Left in scope under the entire-project default, the agent classifies its own reports as customer evidence and uploads them, which means **uploading every protected file's proof salt to immut as document content** and destroying the one property the salted scheme exists to provide. It also files them in the investor pack under Intellectual property, with the classifier quoting itself back as evidence, and grows without bound because report N contains rows for reports 1…N−1. Under finalisation-style skip for **classified** paths: `*draft*`, `*wip*`, `*todo*` unless human forces path. **Auto-ingest path:** never skip for draft/wip — always store if new/changed.
 
 **Also exclude the tooling directories:** `.claude/`, `.cursor/`, `.agents/`, `.vscode/`, `.github/`. These hold agent skills, editor settings and CI config — never business evidence. Excluding them *before* classification matters more than it looks: anything merely classified and skipped is written to check-state, and § Protection report section 2 then lists it under **"Deliberately excluded, and why"**. A report handed to an investor that says `SKILL.md — not evidence` is noise at best, and it advertises that the classifier had nothing better to say. Files excluded here never reach state, so they never reach the report.
 
@@ -1056,7 +1058,7 @@ NOT enough for Tier 1.** You have a non-interactive invocation only if you can s
 
 1. **Two separate numbered questions. Never merge them.** Show the **exact artifact** you will create (the plist / cron line / task / reminder) and the schedule derived from the Q7 cadence.
    1. **May I install this system job?** (numbered yes/no)
-   2. **May scheduled runs upload qualifying files with no human present and no per-file confirmation?** (numbered yes/no, asked on its own)
+   2. **May scheduled runs upload qualifying files with no human present and no per-file confirmation?** (numbered yes/no, asked on its own). Say here, while a human is present, that **every scheduled run also writes a report into `./immut-reports/`, and those reports contain proof salts, which are verification keys** — otherwise a customer on an hourly schedule is never told to their face that a directory of keys is accumulating in their project, because the only notice goes to a log nobody reads.
 
    A single merged yes confirms **only** the first. Leave `unattendedUpload: false` until the second is answered on its own — scheduled runs then protect the always-protect folder only and leave classified files for an interactive run. "May I upload files to immut?" is a *third*, different question (go-live upload consent, below); answering it does not answer this one.
 
@@ -1090,6 +1092,7 @@ NOT enough for Tier 1.** You have a non-interactive invocation only if you can s
    - **confirm the trigger still exists and still matches.** `jobPath` present on disk (or the label registered), and `invocation` / `jobPath` unchanged since verification. An OS update, a `launchctl bootout`, a moved home directory or an edited invocation kills the job silently.
    - **expire a stale verification — on the right clock.** Read `scheduler.lastObservedFireAt` (written only by § Operating loop step 8). If it is older than **two cadence intervals**, set `verified: false` whatever is recorded. **If it is absent:** compare `installedAt` instead — older than two intervals → `verified: false`; newer → treat the verification time as the last fire and let it stand. Absent must not silently mean "fine" (a dead trigger reports as working) nor automatically mean "stale" (a working Tier 1 trigger gets downgraded on its first interactive run). If the cadence is `custom` and not translatable to an interval, use a 7-day window. Do **not** use `lastRunAt`: it advances on *any* run, so a customer who occasionally runs `immut protect` by hand keeps it fresh forever and a job that died six weeks ago never expires — the check would fire only when nobody is running anything, which is the one case it was not written for. If the cadence is `custom` and not translatable to an interval, use a 7-day window. A trigger that has not fired is not working, however convincingly it was once observed working.
    - **if scheduled runs are currently uploading nothing** (unattended not live-consented, or `autoIngest.enabled` false), say so at the start of the next interactive run. Silent-by-design is right for an unattended run; it is wrong when there is a human present to tell.
+   - **if unattended runs have written reports since the last interactive run**, say how many and that they contain proof salts — once, in the session. Same reasoning: the log discharged the obligation to nobody.
 6. **On go-live, re-verify and re-ask.** When `dryRun` goes false the installed job starts doing something it has never been observed doing. Set `verified: false`; re-ask the unattended-upload question on its own and write **both** `unattendedUpload` and `unattendedUploadConsentMode: "live"` in the same write (a re-ask you did not record is not consent, and leaves the gate shut); then run the trigger again per step 3, and only restore `verified: true` (with `verifiedInMode: "live"`) once you have watched it complete a **live** sweep. Until then use the "triggered, not self-running" wording (§ Protection report Rule 1). A trigger verified in dry run and never re-verified is an intention, not a fact.
 7. **Rule 1's wording binds everything you say, not just the report.** Most customers never run `immut report`; they form their belief from what you tell them in the session and in the digest.
 
@@ -1613,7 +1616,8 @@ Rules:
   The screen may be shared, and the term is the customer's own codename.
 - **No transaction hashes, no proof references, no "on-chain"/"blockchain"/"ledger" words.** The digest
   answers *what did it do and why*. The verifiable references live in `immut report` and on the
-  certificate, where they are clickable.
+  certificate, where they are clickable. **The Report line's salt *count* is required and is not a proof
+  reference** — a number is not a key. Salt *values* never appear in the digest.
 - **No em dashes** (use ` · ` and ` → `). **No emoji.** Markers are ASCII `+ = -`.
 - Do not say "hashed for immut" or "created proof hash".
 
@@ -1622,13 +1626,26 @@ no exceptions: dry run or live, interactive or unattended, whether or not anythi
 the run history.
 
 ```
-  Report: immut-reports/immut-protection-report-2026-07-21T113535Z.html
-          contains 7 proof salts · gitignored · do not publish
+  Report: immut-reports/immut-protection-report-2026-07-21T113535Z.html   (13:35 local)
+          contains 12 proof salts · gitignored · do not publish
 ```
 
-The salt line is **required whenever the report contains any**, and it carries the Rule 8 warning that
-used to be spoken before writing. Omit it only when the count is zero. An unattended run writes the same
-two lines to its log, since there is no session to say them in.
+Build the second line from three independent facts, not one:
+
+- **`contains N proof salts`** — N is the number of rows **in the file you just wrote** whose `proofNonce`
+  is non-null. **Not** this run's upload count: section 1 also lists `unchanged_since_check` and
+  `already_registered_elsewhere` rows, which carry salts too. On a steady-state project this run protects
+  0 files and the report still embeds hundreds. Print the line whenever N is above zero.
+- **`gitignored`** — only when the two-command test passed. Otherwise `NOT gitignored · do not commit`.
+- **`do not publish`** — **always**, even at zero salts. A dry-run report still lists file paths, and
+  paths like `invention-disclosure-*` are themselves disclosure.
+
+The filename is UTC; print the local time beside it, or a customer outside UTC cannot match the digest to
+the file. An unattended run writes the same lines to its log.
+
+**If the report could not be written** (read-only project, or a hosted host with no filesystem — Tier 2 is
+explicitly supported), do **not** print a Report line naming a file that does not exist. Print
+`report not written: <reason>`.
 
 ---
 
@@ -1653,7 +1670,11 @@ This is the rule the others depend on, and it is the one you will most want to b
 
 If files have appeared since the last run, the honest response is to tell the human **in the session**, not in the report: “There are new files since the last run. Want me to run `immut protect` first, then report?” That is a better outcome anyway, and it keeps the report a record rather than an opinion.
 
-**Ask first (in the session, not in the report):** the organisation name for the header, unless it is obvious from config or the human already said it. Do not invent one and do not silently omit it.
+**Ask first (in the session, not in the report):** the organisation name for the header, unless it is obvious from config or the human already said it. Do not invent one and do not silently omit it. **Persist it as `orgName` in `immut.config.json`** at setup checkpoint 1.
+
+**Unattended, there is nobody to ask**, and reports are now written on every run — so take `orgName` from config. If it is absent, head the report **"Organisation not recorded"** and log it. Do not ask (a scheduled job that asks hangs forever), and do not invent. The same applies to the go-live verification run, which is fired through the scheduler with no human attached.
+
+**Rule 0 governs the report's *content*, not its plumbing.** Creating `immut-reports/` and running the gitignore check are done in order to write the file and are **exempt** from "do not list a directory"; neither puts anything into the report.
 
 **Input:** `immut-check-state.json` + `immut.config.json`. It reports the **last run**; it does not re-scan.
 
@@ -1665,10 +1686,21 @@ Date first so the folder sorts chronologically; the time makes two runs on one d
 which is why there is no longer any "ask before overwriting" rule — nothing is ever overwritten. One
 location and one naming rule for **every** report, automatic or manual.
 
-> ⛔ **`immut-reports/` must be gitignored.** Add it at setup alongside `.env`, and re-check before every
-> write. Every report embeds proof salts, and a salt is a verification **key** — Rule 8 forbids publishing
-> a salted report, and a report committed to a repo that later goes public is exactly that. If the project
-> is not a git repo, skip the claim rather than asserting it (same rule as `.env`).
+> ⛔ **`immut-reports/` must be gitignored, and the check runs before EVERY report write — in every
+> mode.** Not at the credential step: that is live-only and is skipped entirely by both the recommended
+> dry-run first run (§ First contact option 1) and the env-credential headless path, which are precisely
+> the runs that would otherwise write salted reports into an unignored directory.
+>
+> Use the **same two-command test as `.env`**, and act on all three outcomes:
+> - `git check-ignore -q immut-reports/` **succeeds** and `git ls-files --error-unmatch immut-reports/`
+>   **fails** → say `gitignored`.
+> - not ignored → add it to `.gitignore`, re-check, then say it.
+> - **already tracked**, or **not a git repo** → **do not print the word `gitignored`**. Print
+>   `NOT gitignored · do not commit` and tell the human. A directory tracked before the rule existed keeps
+>   being committed despite the pattern, which is the exact trap the `.env` rule's second command catches.
+>
+> Every report embeds proof salts, and a salt is a verification **key** — Rule 8 forbids publishing a
+> salted report, and a report committed to a repo that later goes public is exactly that.
 
 **Three content sections, in this order, then the technical appendix. Do not add a fourth *section*.**
 Rule 1's disclosure belongs inside section 3, not in a section of its own. The appendix (§ How to verify
@@ -1729,41 +1761,94 @@ to verify, and printing a method with no data to run it on implies there is.
 **Open with what the reader needs**, all of it already in the section 1 table: the file, its transaction
 reference, its proof salt, and its scheme.
 
-**Salted schemes (`hmac-sha256-nonce-v2` / `-v3`) — four steps.** Print them as runnable commands:
+**Salted schemes (`hmac-sha256-nonce-v2` / `-v3`) — five steps.** Print them as runnable commands. The
+construction below is the backend's `utils/proofCrypto.js computeCommitment()`:
+`HMAC-SHA256(key = raw bytes of the hex salt, message = raw 32 digest bytes)`. **v2 and v3 use the same
+construction for `fileHash`** and differ only in whether identity fields are also HMAC'd, so one recipe
+covers both. Do not paraphrase these commands — the encodings are exactly where this goes wrong.
 
 1. **Hash the file.** `shasum -a 256 <file>` (Linux: `sha256sum <file>`).
 2. **Commit it under the salt.** The published value is an HMAC of the file's digest, keyed by the salt —
-   which is why the record alone gives nothing away:
+   which is why the record alone gives nothing away. `xxd -r -p` matters (the message is the raw digest
+   bytes, not the hex text) and so does `hexkey:` (the key is the raw bytes of the hex salt):
    ```
    shasum -a 256 <file> | cut -d' ' -f1 | xxd -r -p \
-     | openssl dgst -sha256 -mac HMAC -macopt hexkey:<salt> -hex
+     | openssl dgst -sha256 -mac HMAC -macopt hexkey:<salt> -hex | awk '{print $NF}'
    ```
-3. **Fetch the record from a public node — immut is not involved.**
+   The `awk` is not decoration: `openssl` prints `SHA2-256(stdin)= <hex>`, so without it step 5's
+   comparison is literally false.
+3. **Fetch the record from a public node — immut is not involved.** Use the node for **that row's**
+   network:
    ```
-   curl -s -X POST https://s.altnet.rippletest.net:51234/ \
+   curl -s -X POST <node> \
      -H 'Content-Type: application/json' \
      -d '{"method":"tx","params":[{"transaction":"<transaction reference>"}]}'
    ```
-   Mainnet: `https://s1.ripple.com:51234/`. Or open the explorer link beside the file in section 1.
+   `<node>` is `https://s1.ripple.com:51234/` for mainnet, `https://s.altnet.rippletest.net:51234/` for
+   the public test network. **A state file can hold both**, and Rule 9 is per row. **If the network was
+   not recorded for a row, print no node URL for it** and say the network is unknown — defaulting to
+   either is an invented claim about where the record lives, and running the wrong one returns
+   `txnNotFound`, from which a reader reasonably concludes the reference was fabricated.
    Confirm `validated: true`.
-4. **Decode the memo and compare.** `Memos[0].Memo.MemoData` is hex-encoded JSON; decode it and read
-   `fileHash`. It must equal step 2's output.
+4. **Read the close time — this is the part that carries the whole claim.** `result.date` is seconds
+   since 2000-01-01 UTC, not Unix time:
+   ```
+   date -u -r $(( <result.date> + 946684800 ))
+   ```
+   That moment, to within the ledger's few-second close resolution, is the latest the file can have
+   existed. Without this step a reader learns only that the file matches a record, never *when* — which
+   is the only thing being proved.
+5. **Decode the memo and compare.** Take the memo whose decoded JSON contains `fileHash` (do not assume
+   there is exactly one, or that it is first):
+   ```
+   curl -s -X POST <node> -H 'Content-Type: application/json' \
+     -d '{"method":"tx","params":[{"transaction":"<transaction reference>"}]}' \
+     | python3 -c "import sys,json,binascii; r=json.load(sys.stdin)['result']; tx=r.get('tx_json',r); [print(binascii.unhexlify(m['Memo']['MemoData']).decode()) for m in tx.get('Memos',[])]"
+   ```
+   `Memos` sits at `result` level on some node versions and under `result.tx_json` on others, which is
+   why the command tries both. Assume one and it silently prints nothing.
+   ```text
+   ```
+   Its `fileHash` must equal step 2's output.
 
 **`sha256-plain-v1`:** skip step 2 and compare step 1's digest directly with `fileHash`.
+
+**`hashScheme` null or missing:** do not pick a branch. Print step 1, say the scheme was not recorded,
+and tell the reader to try the plain comparison first and the salted step only if a salt is shown. The
+salted branch is the *longer* recipe, so guessing it feels safe and is not: against a plain record it
+HMACs and mismatches.
+
+**Salted row with `proofNonce` null:** that row is not verifiable by whoever holds this report — the salt
+retrieval endpoint is documented as fragile, so this is expected rather than exotic. Do **not** print a
+command with an empty `hexkey:`. Label it in section 1 as `verification key not recorded` and say so here.
 
 **State plainly what this proves, and what it does not.** Matching values prove the file is byte-identical
 to the one protected, and the ledger's close time proves it existed no later than then. It does **not**
 prove who wrote it or who owns it. Put that limit here, beside the method, not only in the footer.
 
-**Privacy note worth making:** the memo carries the organisation name, domain and uploader as **hashes**,
-so the public record identifies nobody. That is also why the salt matters — without it the record cannot
-be tied to a file, by an investor or by anyone else.
+**Privacy note — and it is scheme-dependent, so do not print one line for both.** The memo carries the
+organisation name, domain and uploader as **hashes**, so the record does not name the customer. Say
+**pseudonymous, not anonymous**: those are short, guessable values, and anyone who guesses the right
+domain can confirm the guess in milliseconds. Claiming it "identifies nobody" is a falsifiable assurance,
+which is the failure class Rule 9 exists to prevent.
 
-**Rule 9 applies here too.** On a test network, say in the appendix that these particular records are on a
-public test network which is periodically reset, so the method is sound but the permanence is not.
+- **Salted:** without the salt the record cannot be tied to a file, by an investor or anyone else.
+- **`sha256-plain-v1`:** the opposite is true and must be said — anyone holding a copy of the file can
+  confirm it against the public record **without** the salt and without the customer's involvement. The
+  salted sentence next to a plain-scheme row contradicts the appendix's own instruction two lines above.
 
-**Include one worked example** using a real row from this run — its actual commands and expected output —
-so the reader can see what a match looks like before trying their own.
+**Rule 9 applies here too.** On a test network, say these records are on a public test network which is
+periodically reset, so the method is sound but the permanence is not — **and that after a reset the
+records are gone, so neither the match nor the time can be checked again.**
+
+**Include one worked example** using a real row from this run.
+
+> ⛔ **Run the commands before printing them.** Compute step 2 against that row's actual file and compare
+> it with the memo's `fileHash`. If they do not match, **do not print the appendix**: say the verification
+> method could not be reproduced for this run and raise it with the human in the session. Transcribing
+> `fileHash` out of the memo and presenting it as step 2's output produces a demonstration of verification
+> that has never been demonstrated, in a document handed to an acquirer — and if the construction is ever
+> wrong, every reader who tries it concludes the pack is fabricated.
 
 **Reason codes. Use these words. Do not invent a translation from the code name.**
 
@@ -1813,7 +1898,7 @@ Label the column **“Verify”**, never “txHash”: that is chain vocabulary 
    Either way, the cadence in config is an intention; the installed, *verified* trigger is the fact. Never claim automatic runs on a reminder/manual setup, or on a scheduler you did not verify.
 2. **No “what’s missing” / red-flag / gap section.** See Rule 0. Two distinct traps: you cannot know what *should* exist (that is a guess), **and** you must not report what you can see on disk but was not in the run (that is auditing, not reporting). Both are out. Report what the run did. Nothing else.
 3. **No valuation claims.** Readiness and trust only. Never “increases your valuation”, and not the softer forms either: “makes you worth more”, “improves your multiple”. Describing the pack as *stronger* or *harder to attack* is a claim about the evidence and is fine; a claim about the company’s price is not.
-4. **No blockchain / XRPL / crypto / wallet / on-chain / mainnet / testnet wording in the three content sections.** Say: permanent proof, independently verifiable, public record, verification does not depend on immut. **The technical appendix is the one exception** (§ Appendix — "How to verify this yourself"), because a verification instruction that will not name the record cannot be followed. Method may name the mechanism; claims may not.
+4. **No blockchain / XRPL / crypto / wallet / on-chain / mainnet / testnet wording in the three content sections.** Say: permanent proof, independently verifiable, public record, verification does not depend on immut. **The technical appendix is the one exception** (§ Appendix — "How to verify this yourself"), because a verification instruction that will not name the record cannot be followed. Method may name the mechanism; claims may not. **A bare public-record URL in the Verify cell is data, not a claim, and stays** — its host inevitably contains chain words, and dropping it would remove the only trust-independent link in section 1, leaving immut's own verify endpoint, which this file calls a convenience rather than independence. The prose around it stays outcome language.
 5. **Do not assess adequacy.** Not an audit, not legal advice, no view on whether the IP, contracts, or compliance records are complete or sufficient. Say so in a short footer. A footer is not a fourth section: write it.
 6. **Do not overstate agent attribution.** If a run records that the upload came from an agent, that is an assertion recorded by immut’s backend, not cryptographic proof of who authored the file. Do not present it as proof of authorship.
 7. **Never invent a verification link, certificate id, transaction reference, count, or timestamp.** If the state file does not have it, it does not go in.

@@ -10,6 +10,22 @@ version — this repo has no single repo-wide version.
 
 ## Unreleased (on `dev`)
 
+- **A report after every sweep, into `immut-reports/`.** Dry run, live, interactive, unattended — no
+  exceptions. Filenames are `immut-protection-report-<YYYY-MM-DD>T<HHMMSS>Z.html`: date first so the
+  folder sorts chronologically, time so nothing is ever overwritten. This **reverses** the previous rule
+  ("offer the report… do not generate it unasked") on purpose — the folder is the run history.
+  `immut-reports/` is gitignored at setup alongside `.env`, because every report embeds proof salts and a
+  salt is a verification **key**. Rule 8's warning could no longer be spoken before writing once writing
+  is unattended, so it moved: the digest, or the log, names the file and the salt count every run.
+- **New report appendix, "How to verify this yourself"** — hash the file, HMAC it under the salt, fetch
+  the record from a public node, decode the memo, compare. States what a match proves (byte-identical,
+  existed by then) and what it does not (authorship, ownership), plus the privacy point that the record
+  carries org and uploader only as hashes.
+  **This required a deliberate Rule 4 carve-out**, stated in the file so a later pass does not delete the
+  appendix citing the rule: chain vocabulary is permitted **inside the appendix only**, because an
+  instruction that will not say where the record is cannot be followed, and independence from immut is
+  the strongest claim the document makes. Method may name the mechanism; claims may not.
+
 - **Connect to immut before proposing a folder structure (live).** The objective trees are templates.
   Setup used to propose one at Q3 and not connect until after Q7, so the workspace was picked *after*
   the human accepted a structure and existing folders were first read at ensure time — a customer who
