@@ -6,10 +6,10 @@ Tools for using [immut](https://www.immut.io) from AI agents and terminals: clas
 > - Install public skill: `npx skills add enroh-ops/immut-agent` (production `main`; `…#dev` for the development branch)
 > - **Works against any immut instance** — local / staging / production. Endpoint + workspace + key are pasted at go-live (Organization Settings → AI Agents → Connect an agent); endpoint+workspace → `immut.config.json`, key → gitignored `.env`. Resolution: `IMMUT_API_URL` env → `apiBaseUrl` config → `https://backend.immut.io`.
 > - Public skill **uploads the file** to immut (`POST /api/v1/documents` + optional `folder`). **Never** hash-only `POST /proofs` / `immut proof create`.
-> - **Short setup (7 questions):** dry-run or live → **objective** → **accept immut folder proposal** → **connect tools to this AI** (Drive/Gmail/Teams/Slack) → **watch entire project (default)** → **always-protect drop folder** → **how often to look for new/changed files** → then **set up automatic protection** (OS scheduler / host task / reminder — any host, local or hosted) → offer AGENTS.md + first sweep
-> - Phrases: `immut dry-run` · `immut setup` · `immut connectors` · `immut keywords` · `immut schedule` · `immut sweep` · `immut protect` · `immut status` · `immut report`
+> - **Short setup (5 questions, live):** **objective** → **accept immut folder proposal** → **connect tools to this AI** (Drive/Gmail/Teams/Slack) → **watch entire project (default)** → **always-protect drop folder** → then **automatic protection is set up for you, daily** (OS scheduler / host task / reminder — any host, local or hosted; announced, and changed or removed with `immut schedule`) → offer AGENTS.md + first sweep
+> - Phrases: `immut setup` · `immut connectors` · `immut keywords` · `immut org` · `immut schedule` · `immut sweep` · `immut protect` · `immut status` · `immut report`
 > - Live needs: endpoint (base URL), agent key, workspace id, human upload consent — the pasted connection covers all three. Scopes: `documents:write`, `documents:read`, `folders:read`, `folders:write`, `certificates:read`, `workspaces:read`
-> - Dry-run: no API key, no upload to immut; writes `immut.config.json` + `immut-check-state.json`
+> - **No dry run** (removed 2026-07-23): setup is live. No credentials yet → the agent guides the human to Organization Settings → AI Agents and stops clean until they have a connection.
 > - Every sweep: inventory tools; search **all available sources**; resume incomplete initial check from check-state
 > - Full rules: [`skills/immut-proof/SKILL.md`](skills/immut-proof/SKILL.md)
 > - Hash-only CLI/custom path is separate (see below), not the public skill
@@ -23,7 +23,7 @@ Landing: [immut.io/ai-agents](https://www.immut.io/ai-agents) · Docs: [immut.io
 
 | Who | Path |
 |---|---|
-| **Developers / AI-fluent** | Install skill, chat setup (`immut setup` / `immut dry-run`), edit `immut.config.json` |
+| **Developers / AI-fluent** | Install skill, chat setup (`immut setup`), edit `immut.config.json` |
 | **Companies newer to AI** | Same skill today; **planned** web wizard on app.immut.io to configure + download a package for Claude/Cursor/Grok so immut never pays for LLM tokens. See monorepo `webapp/agents/AGENT-DASHBOARD.md` |
 
 immut is the **proof vault + (soon) control plane**. Your AI host runs the agent and holds Drive/Email/Teams connections.
@@ -55,7 +55,7 @@ The skill above is **free and open-source**: you install it, connect your own to
 
    Integrator / Zapier keys still live under [Account → API keys](https://app.immut.io/account?tab=api-keys) — prefer the **agent** key so uploads are attributed as agent on immut and on the permanent record.
 
-You can skip this if you only want a **dry run** first.
+You will need this before setup — there is no offline or trial mode. If you don't have it yet, the agent walks you through getting it (Organization Settings → AI Agents → Connect an agent).
 
 ### 2. Install the skill
 
@@ -74,27 +74,57 @@ Or point the agent at this repo’s skill file: `skills/immut-proof/SKILL.md`.
 
 Open the project that contains contracts, policies, IP packs, etc. By default the skill watches the **entire project** (with standard exclusions like `.git` and `node_modules`).
 
-### 4. Dry run (recommended first)
+### 4. Set it up
 
 Say to the agent:
 
 ```text
-immut dry-run
+immut setup
 ```
+
+Setup is **live** — it connects to immut and protects for real (there is no offline trial). What used to be a dry run is now the interactive first sweep: the agent lists every file it would protect and waits for your yes before anything uploads. If you have no immut connection yet, it walks you through getting one and picks up when you do.
 
 **Tip:** Answer wizard prompts with **numbers** (`1`, `2`, `3`…) when the agent lists options. Avoid typing bare `exit` or `quit` — those can end a Grok/CLI session. For “sale of the business,” pick the numbered option labelled **Exit / sale of the business**.
 
-#### Wizard (7 questions)
+#### Wizard (5 questions)
+
+The agent connects to immut **first** (paste the three lines from Connect an agent), then:
 
 | # | What you choose |
 |---|---|
-| 1 | Mode — dry run (no upload) or live |
-| 2 | Objective — numbered options (1–4). Use **2** for Exit / sale of the business — do **not** type the word `exit` alone |
-| 3 | **immut folders** — agent shows a **proposal** for how files will be organised **on immut** (not your local folders). Accept, edit, or change objective |
-| 4 | **Connect tools to this AI** — Drive, Gmail, Teams, Slack, etc. go on **your AI host**, not immut. Agent searches the project for MCP/tool config and lists what it can already see. Connector details live in the skill: [`skills/immut-proof/SKILL.md`](skills/immut-proof/SKILL.md) § Connect sources |
-| 5 | **What to watch** — **Entire project (recommended default)** or specific folders only |
-| 6 | **Always-protect folder** — drop zone: anything put there is sent to immut with **no** content check. Local, Drive, or Teams — or skip |
-| 7 | **How often to look for new/changed files** — hourly / daily / weekly / custom / manual. Drive/Teams autosave is fine: each run only re-checks files whose **last modified time or size** changed since the last check. **After this**, the agent sets up the **best recurring trigger your environment supports** by default (with your consent): a real **OS scheduler** (LaunchAgent / cron / systemd / Task Scheduler) that runs the agent for you, a **host-native scheduled task**, or a **reminder** if true auto-run isn't possible here. Works on any host, local or hosted. immut cloud does not run it — your OS or AI host does. Want it fully hands-off? See **[Managed service](#prefer-it-done-for-you--managed-service)** |
+| 1 | Objective — numbered options (1–4). Use **2** for Exit / sale of the business — do **not** type the word `exit` alone |
+| 2 | **immut folders** — agent shows a **proposal** for how files will be organised **on immut** (not your local folders). Accept, edit, or change objective |
+| 3 | **Connect tools to this AI** — Drive, Gmail, Teams, Slack, etc. go on **your AI host**, not immut. Agent searches the project for MCP/tool config and lists what it can already see. Connector details live in the skill: [`skills/immut-proof/SKILL.md`](skills/immut-proof/SKILL.md) § Connect sources |
+| 4 | **What to watch** — **Entire project (recommended default)** or specific folders only |
+| 5 | **Always-protect folder** — drop zone: anything put there is sent to immut with **no** content check. Local, Drive, or Teams — or skip |
+
+**There is no cadence question.** Runs happen **daily**, and the agent sets up the best recurring trigger
+your environment supports as part of setup: a real **OS scheduler** (LaunchAgent / cron / systemd / Task
+Scheduler), a **host-native scheduled task**, or a **reminder** if true auto-run isn't possible there.
+Works on any host, local or hosted. immut cloud does not run it — your OS or AI host does.
+
+It tells you exactly what it installed, where it lives, and the one line that removes it. **Change the
+cadence or remove it whenever you like with `immut schedule`** (hourly, weekly, custom, or off), and
+`immut protect` always works by hand. Remove it once and it stays removed — no later run puts it back.
+
+Two things stay separate from the install, and are still asked:
+
+- **May scheduled runs upload files with no human present?** Until you say yes, in live mode, scheduled
+  runs protect your always-protect drop folder and nothing else. A job is one line to remove; a proof
+  cannot be withdrawn.
+- **Go-live upload consent** — the first upload of anything, at all.
+
+Want it fully hands-off? See **[Managed service](#prefer-it-done-for-you--managed-service)**.
+
+**Drive/Teams autosave is fine:** each run only re-checks files whose **last modified time or size**
+changed since the last check.
+
+#### Your first sweep, when there's a lot to read
+
+If your back catalogue is bigger than one run can read, the agent says so **before** it starts — how many
+candidate files it found and how many it can read per run — and asks how you want it worked through:
+all of it now, spread over the daily runs, or narrow the scope first. Files nobody has opened yet are
+reported as exactly that: not opened, which is a different statement from "not evidence".
 
 Then short yes/no offers:
 
@@ -149,7 +179,7 @@ Confirmed files (and always-protect drop-folder files) are uploaded into the map
 | `immut report` | Render the last run as a shareable HTML report you can send to an investor |
 | `immut keywords add Acme` | Track your own terms |
 | `immut keywords` | List custom keywords |
-| `immut schedule` | Change cadence and set up / re-verify the recurring trigger (OS scheduler / host task / reminder) |
+| `immut schedule` | Change the cadence, or re-verify / remove the recurring trigger (OS scheduler / host task / reminder). Removing it is permanent until you ask again |
 | `immut connectors` | Re-check tools / enable Drive, Gmail, Teams, Slack |
 
 ### 7. Show someone
@@ -186,7 +216,7 @@ The skill is deliberately short. After setup, the agent **may**:
 - Suggest custom keywords after a first sweep (**ask before writing**)  
 - **Resume** an incomplete initial check from `immut-check-state.json`  
 - Create/reuse immut folders on go-live  
-- Update next-run hints after each cadence run  
+- Set up the daily recurring trigger, and tell you what it installed  
 
 The agent **must still ask you** for:
 
@@ -194,7 +224,7 @@ The agent **must still ask you** for:
 - Where the always-protect folder lives  
 - Going live / upload consent / API key  
 - Expanding watch scope outside what you approved  
-- Installing a system cron / LaunchAgent / scheduled task  
+- Letting scheduled runs upload with nobody present  
 
 Edit `immut.config.json` anytime, or say `immut setup` to re-run the wizard.
 
@@ -203,8 +233,8 @@ Edit `immut.config.json` anytime, or say `immut setup` to re-run the wizard.
 ## For AI agents: operating contract
 
 1. Load and follow [`skills/immut-proof/SKILL.md`](skills/immut-proof/SKILL.md).  
-2. If no `immut.config.json`, run the **7-question** setup (or dry-run setup) before scanning.  
-3. **Dry run:** zero calls to immut APIs; never claim files were stored.  
+2. If no `immut.config.json`, run the **5-question** live setup before scanning.  
+3. **No credentials yet:** guide the human to Organization Settings → AI Agents; write no config until they have a connection.  
 4. **Live:** create/reuse folder tree with `POST /api/v1/folders`; upload with multipart `POST /api/v1/documents` including `workspace` and `folder` when mapped.  
 5. Classify with full local document text + built-in packs + `customKeywords`. Auto-ingest: **no** classify — always upload if new/changed.  
 6. Cite match reasons (including `custom keyword: …` or `auto-ingest`).  
@@ -228,7 +258,7 @@ Edit `immut.config.json` anytime, or say `immut setup` to re-run the wizard.
 | Your keywords | Optional `customKeywords.global` and `byFolder` |
 | Sources | All tools this AI can see (local + confirmed connectors) |
 | Sweep | Full catch-up (resumable), then incremental by mtime/size |
-| Schedule | Sets up the best recurring trigger your environment supports (OS scheduler / host task / reminder), on any host; immut cloud does not poll your Drive. Fully hands-off = managed service |
+| Schedule | Sets up the best recurring trigger your environment supports (OS scheduler / host task / reminder) **daily, without asking**, then tells you what it installed and how to remove it; on any host. immut cloud does not poll your Drive. Fully hands-off = managed service |
 | Store | Live upload to immut (encrypted custody + permanent proof) |
 
 Recognition is heuristic. It is not legal or audit advice. **Protect = upload the file** via `POST /documents` — never hash-only `POST /proofs` / `immut proof create`.
@@ -239,16 +269,15 @@ Recognition is heuristic. It is not legal or audit advice. **Protect = upload th
 
 | Human / agent phrase | Action |
 |---|---|
-| `immut dry-run` | Skill-only test; no upload to immut |
-| `immut setup` | 7-question wizard (goal → folder accept → tools → scope → always-protect → cadence) |
+| `immut setup` | 5-question live wizard (goal → folder accept → tools → scope → always-protect) |
 | `immut connectors` | Instructions + project tool search + re-inventory AI tools |
-| `immut schedule` | Change cadence and set up / re-verify the recurring trigger (OS scheduler / host task / reminder) |
+| `immut schedule` | Change the cadence, or re-verify / remove the recurring trigger (OS scheduler / host task / reminder). Removing it is permanent until you ask again |
 | `immut keywords` / `add` / `remove` | Manage custom keywords |
+| `immut org <name>` | Set the organisation name that heads every report |
 | `immut sweep` | Full classify (+ upload if live and confirmed); resume if interrupted |
 | `immut protect` | Incremental run |
 | `immut status` | Summarise check-state + connectors + initialSweep |
 | Store / protect this file | One-off classify and file |
-| Go live | Leave dry run; require key and consent |
 
 ---
 
@@ -256,7 +285,7 @@ Recognition is heuristic. It is not legal or audit advice. **Protect = upload th
 
 ### `immut.config.json`
 
-Holds objective, `dryRun`, `apiBaseUrl` (which immut instance), `workspaceId`, watch paths, folder tree, `autoIngest`, `customKeywords`, `connectors`, `immutFolders` (ids when live), sweep cadence. **No secret** — the API key lives in `.env`, never here. Examples in the monorepo under `webapp/agents/examples/` when developing alongside the webapp docs.
+Holds objective, `apiBaseUrl` (which immut instance), `workspaceId`, watch paths, folder tree, `autoIngest`, `customKeywords`, `connectors`, `immutFolders` (ids when live), `orgName`, and the `sweep` block (cadence `daily`, `readCapPerRun`, scheduler facts). **No secret** — the API key lives in `.env`, never here. Examples in the monorepo under `webapp/agents/examples/` when developing alongside the webapp docs.
 
 ### `immut-check-state.json`
 
@@ -264,14 +293,13 @@ Holds `lastRunAt`, `lastRunMode` (`full` \| `incremental`), per-file `mtimeMs`/`
 
 ---
 
-## Dry run vs live
+## What setup requires
 
-| | Dry run | Live |
-|---|---|---|
-| Endpoint + API key | Not required | Required (pasted connection → `.env` + `apiBaseUrl`) |
-| Network | None | Folder create + document upload |
-| Output | Config + check-state + “would store” list | Files on immut in folders |
-| Purpose | Test skill and keywords safely | Real protection |
+Setup is **live** — there is no dry run. It needs a pasted immut connection (endpoint + agent key +
+workspace) and your upload consent, and it stores files on immut in folders. Before anything uploads, the
+interactive first sweep lists every match and waits for your yes, so nothing is protected without you
+seeing it first. No connection yet? The agent guides you to Organization Settings → AI Agents and stops
+cleanly until you have one — it never runs offline.
 
 ---
 
