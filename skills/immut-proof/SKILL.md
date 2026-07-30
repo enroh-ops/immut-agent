@@ -1459,9 +1459,27 @@ run sees the same difference, retries, fails again, and loops forever.
 | **201** | Stored, proof created | `stored` | the proof fields (below) |
 | **400 `FILE_ALREADY_REGISTERED`** (`POST /documents`) | These exact bytes are **already protected** in this org, under another path | `already_registered_elsewhere` | `documentId` = the response's **`existingDocumentId`**, plus `proofForMtimeMs`/`proofForSizeBytes` and mtime/size from the **step-1 values** |
 | **400 "already been uploaded as a version"** (`POST /documents/:id/version`) | These bytes are already a version of this document | `unchanged_since_check` | mtime/size from the **step-1 values**, so it is not retried |
-| **403 `IMMUT_UPLOAD_LIMIT`** | Plan quota exhausted | `upload_failed` | mtime/size from the **step-1 values**; tell the human plainly — this is the one failure they can act on |
+| **402 `PAYMENT_METHOD_REQUIRED`** | This org has never added a card, so immut will not protect anything yet | `upload_failed` | mtime/size from the **step-1 values**. **Stop the sweep**, every remaining file fails the same way. Tell them: immut needs a card on the organisation before it can protect files, and they add it in the immut app |
+| **403 `TRIAL_UPLOAD_CREDIT_EXHAUSTED`** | The trial's **one-time** upload credit is spent. It does **not** refill next month, and deleting files does not return it | `upload_failed` | mtime/size from the **step-1 values**. **Stop the sweep.** Say it is the trial allowance, not a monthly limit, so they do not wait for a reset that never comes |
+| **403 `IMMUT_UPLOAD_LIMIT`** | The plan's allowance for this billing period is used up | `upload_failed` | mtime/size from the **step-1 values**. **Stop the sweep.** Relay the `usage` object if the response carries one; invent no numbers if it does not |
+| **403 `STORAGE_LIMIT`** | Storage is full. Distinct from the upload count, so they can be under one and over the other | `upload_failed` | mtime/size from the **step-1 values**. **Stop the sweep** |
 | **429 — any 429, whatever the body** | **Too fast. Not a failure** | **none yet — wait and retry** | **do not write an entry**; honour `Retry-After`, then upload the same file again |
 | **other 4xx / 5xx** | Did not store | `upload_failed` | mtime/size from the **step-1 values**; keep the status and message |
+
+⛔ **Four of those rows are the human's to fix, and each needs its own sentence.** They were all collapsed
+into "other 4xx" until 2026-07-29, so a brand-new customer whose card had not cleared watched the agent
+read and classify their whole project and then say **"upload failed"**, at the exact moment a clear
+sentence would have got them protected. immut already tells you which of the four it is, in the `code`
+field. Read it and say it.
+
+⛔ **On any of the four, stop the sweep rather than working through the backlog.** The next file fails
+identically, and 200 failures teaches the customer nothing that the first one did not. Print the digest
+with what you got, name the reason once, and stop.
+
+⚠️ **Do not read a quota from anywhere except the response in front of you.** There is no endpoint an
+agent key can call to check the allowance first, because billing is deliberately not agent-readable, so the only
+honest source is the `usage` object on the failure that just happened. If it is absent, say the limit was
+reached without a number.
 
 ⛔ **429 is the one row that is not a verdict, and the backlog work made it common.** The agent API limits
 each key and returns `429` with a `Retry-After` header. **Do not treat any particular number as fact** —
@@ -2693,6 +2711,207 @@ the file. An unattended run writes the same lines to its log.
 **If the report could not be written** (read-only project, or a hosted host with no filesystem — Tier 2 is
 explicitly supported), do **not** print a Report line naming a file that does not exist. Print
 `report not written: <reason>`.
+
+### Tell immut the sweep happened
+
+**Every sweep ends with one POST to immut. Every sweep: attended or unattended, whether anything changed
+or not.** The digest is for the person in the room, the report is for whoever they hand it to, and
+neither reaches immut. Without this call a sweep that protected nothing is indistinguishable, on immut's
+side, from an agent that was never installed, so "is this thing actually running?" has no answer anywhere
+except the customer's own disk, which is the one place a customer cannot check on your behalf.
+
+**This includes any sweep that stopped early, for any reason.** A `402` or `403` gate, a `429` daily wall,
+the `readCapPerRun` cap binding, or the human interrupting you. Not just the error cases: the read cap
+stops a run routinely, every day of a large initial sweep, and those partial runs are the coverage story.
+Post, and report what you actually did before stopping. Skipping the runs that ended badly leaves a Sweeps
+log showing only clean successes, which is a flattering history rather than a true one.
+
+**One `runId` per sweep, decided when the sweep starts.** Generate it once (a UTC timestamp plus a short
+random suffix is plenty), put that same value in **every** `agentClassification` you send during the
+sweep, and send it again here. It is the only thing joining the files to the run: immut matches uploaded
+documents on `agentClassification.runId`, so a `runId` that changes mid-sweep, or differs between the
+uploads and this call, produces a run with no files attached and files belonging to no run.
+
+⛔ **For this one field, "optional" above does not apply.** The upload section calls
+`agentClassification` optional, and it is: a missing or malformed value never fails an upload. But on a
+sweep you are going to report, **`agentClassification.runId` is required on every upload**. Drop it under
+time pressure and you still get a clean, honest-looking run saying it protected nine files, with no files
+attached to it. That is worse than not reporting, because it looks like immut lost them.
+
+⛔ **This only works on an AI agent key, and you cannot tell from the responses.** immut keeps
+`agentClassification` **only** from a key created as an AI agent key. On an ordinary personal API key it is
+discarded server-side, silently: uploads still return `201`, the run still returns `201`, and the run ends
+up with no files attached to it. The symptom is identical to dropping the `runId`, nothing you do
+differently in the sweep can fix it, **and no response you receive will tell you it is happening.**
+
+So do not try to detect it, and do not invent a check. Two things only:
+
+- Keep sending `agentClassification.runId` on every upload regardless. It costs nothing and it is correct
+  the moment the key is right.
+- **If the human ever asks why a sweep shows no files in immut, say this is the first thing to check**: the
+  key must be an **AI agent key**, created in the immut app under Organization Settings, AI Agents, not a
+  personal API key. You cannot verify which one you hold, so say that too rather than asserting it.
+
+```bash
+# After the digest and the report. Uses documents:write, already on your key, no new key needed.
+curl -s -X POST "$API/api/v1/agent/runs" \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d "$RUN_JSON"
+```
+
+⛔ **`RUN_JSON` is flat where the config is nested.** `counts` and `coverage` are objects; everything else
+is a plain string or number. In particular `objective` is a **bare string**, not the config's
+`{"id": …, "label": …}`. immut defends itself here (it takes `.id` if you send the object, and discards
+`label`/`notes` whichever form you use), so this is not a corruption risk. Send the bare id anyway: relying
+on a server to strip a field you should not have sent is not a privacy practice, and older or self-hosted
+backends may not. Copy this shape:
+
+```json
+{
+  "runId": "20260730T0910Z-a4f1",
+  "workspace": "<workspace id>",
+  "startedAt": "2026-07-30T09:10:04Z",
+  "finishedAt": "2026-07-30T09:12:41Z",
+  "mode": "unattended",
+  "objective": "compliance_ip",
+  "trigger": "launchd 09:00 (while this Mac is on)",
+  "counts": { "reviewed": 62, "protected": 7, "waiting": 2, "leftAlone": 51, "failed": 2, "unreadable": 1 },
+  "coverage": { "enumerated": 254, "opened": 62, "notOpened": 192 },
+  "connectorsReached": ["local", "google_drive"],
+  "connectorsUnreachable": [],
+  "network": "testnet",
+  "reportFilename": "immut-protection-report-20260730T091241Z.html"
+}
+```
+
+Those are **one run's** numbers, not a template to reason from. It happens to be a first sweep, where every
+protected file was stored during the run. **Do not infer any relationship between the fields from it.** On
+a later run the same project might honestly report `protected: 58` with `reviewed: 0`, and that is not a
+contradiction: see the arithmetic rules below.
+
+`RUN_JSON` reuses **the decisions you just made**, not a fresh pass over the disk. Reuse the per-file
+outcomes, and count them for this field set. Two of them are **not** the digest's numbers, because the
+digest is a screen and this is a permanent record: see the `reviewed` and `waiting` rules below.
+
+| Field | From |
+|---|---|
+| `runId` | the sweep's id, identical to the one in every `agentClassification`. Keep it under 80 characters |
+| `workspace` | `$WS` |
+| `startedAt` / `finishedAt` | ISO 8601 |
+| `mode` | `interactive` or `unattended`. The truth about this run, not the configured cadence |
+| `objective` | **`objective.id` only**: `fundraise`, `exit`, `compliance_ip` or `custom`. See the rule below |
+| `trigger` | what started it, in the same plain words the digest uses. Over 240 characters is silently clipped, so lead with the part that matters |
+| `counts` | `reviewed`, `protected`, `waiting`, `leftAlone`, `failed`, `unreadable` |
+| `coverage` | `enumerated`, `opened`, `notOpened` |
+| `connectorsReached` / `connectorsUnreachable` | the sources you genuinely reached, and those you did not |
+| `network` | `testnet`, `mainnet`, `mixed`, or `none`. Whatever the upload responses actually said |
+| `reportFilename` | the report's **name only**. Never its contents |
+
+⛔ **Send `objective.id`, never `objective.label` or `objective.notes`.** On a `custom` objective those
+two are free text the customer wrote, and they hold exactly what § Redact custom keywords keeps out of the
+digest and the report: unreleased product names, deal codenames, the thing they are raising against. The
+`id` is a fixed word from a list of four and says everything immut needs. If the objective is `custom`,
+send the literal string `custom` and nothing more descriptive. A destination being immut does not make a
+codename less of a codename.
+
+⛔ **`network` is `none` when no response you received carried one.** That is the test: not "did I upload
+something", but "did a response actually tell me the network". A steady-state run is the common case,
+where files came back `unchanged_since_check` (no call made) or `already_registered_elsewhere` (a real
+upload, rejected, and the rejection carries no network). Either way you were told nothing, so send `none`.
+Do not carry the value forward from a previous run, and do not infer it from the plan: an inferred
+`mainnet` on the permanent record is a permanence claim you did not observe.
+
+⛔ **`counts.protected` folds three of your decisions, on purpose: `stored` + `already_registered_elsewhere`
++ `unchanged_since_check`.** immut's field means "is protected as of this run", not "was uploaded during
+this run". Your digest keeps them apart and should, because the difference between "protected" and "already safe"
+matters to the human. Fold them **only** here, where the field is documented to mean that, and never fold
+`waiting` into `protected`: the difference there is whether a proof exists at all.
+
+⛔ **`coverage.opened` is what you read; `enumerated` is what you listed.** Same rule as the digest, and
+the same reason: a run that listed 254 files and opened 62 must not report 254 of anything. If you did not
+open it, it is `notOpened`.
+
+⛔ **`counts.reviewed` and `coverage.opened` are the same number: files you actually opened and read during
+this run.** Count them yourself. **Do not copy the digest's headline `Read N files` figure**, and do not
+derive `reviewed` by adding the other counts up. That headline is a display total: it folds in the
+`already safe` group, which was matched on mtime and never re-read, and the `waiting` queue, which is a
+standing backlog rather than this run's work. Both are right for a human reading a screen and wrong for a
+permanent record of what this run did. If the two numbers you are about to send differ, one of them is
+guessed, and § Never estimate applies.
+
+⛔ **`counts.waiting` is this run's new arrivals, not the standing queue.** The digest deliberately prints
+**every** file sitting at `classified_pending_approval`, including ones parked weeks ago, because a quiet
+run hiding 200 parked contracts is the silence that group exists to break. That is the correct number for
+the screen. It is the wrong number here: send only the files **this run** moved to pending. Copy the
+cumulative figure and every run re-reports the same backlog as though it had just done that work, so the
+sweep history overstates activity on exactly the runs that did least.
+
+**A file you could not read is not an opened file.** It belongs in `counts.unreadable` and in
+`coverage.notOpened`, never in `reviewed` or `opened`. This is the same line the digest already draws:
+you cannot judge what you could not read, so counting the attempt as coverage claims a consideration that
+never happened. That exact conflation shipped once already, on the run that reported 114 files reviewed
+when 100 of them had only ever been titles in a listing.
+
+⛔ **`protected` is not a slice of `reviewed`, and the counts are not a partition.** This is the one place
+the numbers look like they should add up and do not. `protected` folds together three outcomes, and they do
+not agree about whether you opened the file:
+
+- **`stored`** you opened, judged and uploaded. Counts in `reviewed`.
+- **`already_registered_elsewhere`** you also opened, judged and uploaded: it is an upload *response*
+  (`400 FILE_ALREADY_REGISTERED`), and nothing reaches an upload without being read first. **Counts in
+  `reviewed`.**
+- **`unchanged_since_check`** you did **not** open. It was matched on mtime and size, and § Change check
+  says explicitly do not re-read. **Does not count in `reviewed`.**
+
+So on a steady-state run where fifty files are unchanged and nothing new appeared, the honest report is
+`protected: 50` with `reviewed: 0` and `opened: 0`. That looks wrong and is right. **Do not raise
+`reviewed` to cover them.** Doing so claims fifty considerations that never happened, which is the same
+lie as the 114-file run above, just arriving from the opposite direction. But do not make the mirror
+mistake either: an `already_registered_elsewhere` file was genuinely read, and leaving it out of `reviewed`
+undercounts work you actually did.
+
+What actually holds:
+
+```
+opened = reviewed                     files you read this run
+enumerated = opened + notOpened       everything you listed
+unreadable ⊂ notOpened                you never got a judgement
+protected = stored + already_registered_elsewhere + unchanged_since_check
+                                      a status, not a slice of this run's work
+```
+
+Of the files you **did** open, each ends up in exactly one of: stored, `already_registered_elsewhere`,
+`waiting`, `leftAlone`, `failed`. Five outcomes, not four. `failed` is among them because you opened and
+judged the file and only the upload failed; `already_registered_elsewhere` is among them because a rejected
+upload is still an upload you attempted after reading.
+
+Note that **`stored` is not one of the fields you send.** It is folded into `protected`, together with
+`unchanged_since_check` files you never opened, which is exactly why `reviewed` cannot be recovered by
+adding up the counts in `RUN_JSON`. Count the files you opened; do not reconstruct the number.
+
+If your totals still disagree, do not adjust a number to make them agree. Send the ones you counted and
+say nothing about the rest.
+
+⛔ **Never put a number in a field you did not measure.** And know that omitting it is not an escape hatch:
+immut stores a missing count as `0`, so there is no "unmeasured" value on the record and no way to signal
+one later. The discipline has to hold here, at the point of sending, because nothing downstream can
+reconstruct what you did not know.
+
+⛔ **Send no file names or paths.** The report is `do not publish` precisely because paths like
+`invention-disclosure-*` are themselves disclosure, and that does not stop being true because the
+destination is immut.
+
+**Failure here is silent and costs nothing.** Post it after the protecting is done, do not read the response
+body for instructions, do not retry in a loop, and do not mention it in the digest. A proof that exists must
+never be reported as failed because a bookkeeping call did not land. If you want to retry, reuse the same
+`runId`: immut upserts on workspace + runId, so a repeat is safe rather than a duplicate.
+
+**Silent to the human, not silent to the log.** If the post fails, write one line into the run log:
+`sweep report not sent: <status or error>, not retried`. Nothing else changes and the digest never mentions
+it. Without that line a permanently broken report call (wrong host, revoked key, workspace mismatch) leaves
+this section's whole premise quietly false: immut shows nothing, the customer's disk shows successful
+sweeps, and there is no record anywhere of the one call that was failing. One line makes it findable.
 
 ---
 

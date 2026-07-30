@@ -86,3 +86,14 @@ You may use the same `immut-check-state.json` pattern as the public skill for �
 ## Errors
 
 `429` backoff · `502 XRPL_ERROR` retry safe · `401`/`403` stop · `alreadyProven: true` = success, store data.
+
+`POST /proofs` gained the same gates as the upload path on 2026-07-29, so two responses are now
+reachable here that never were. Both are the human's to fix, and both mean every subsequent file fails
+identically. Stop and say which it is, rather than working through the list:
+
+- **`402 PAYMENT_METHOD_REQUIRED`**: the organisation has never added a card, so immut will not protect
+  anything yet. Not covered by the `401`/`403` rule above; a bare "stop" here tells the human nothing.
+- **`403 IMMUT_UPLOAD_LIMIT`** / **`403 TRIAL_UPLOAD_CREDIT_EXHAUSTED`**: allowance used up. The trial
+  credit is one-time and does not refill next month; say so, or they wait for a reset that never comes.
+
+Relay the `usage` object if the response carries one. Invent no numbers if it does not.
