@@ -10,6 +10,130 @@ version — this repo has no single repo-wide version.
 
 ## Unreleased (on `dev`)
 
+### 2026-08-01 — staged files carry a destination, and an expired file does not come back
+
+- **`references/engine.md` step 3: `folderKey` is now required for every file that could reach immut**,
+  protected *and* abstained, falling back to the catch-all when no area folder fits. `null` is reserved
+  for a confident skip. The engine had been treating the folder choice as part of the *keep* decision, so
+  abstaining on "is this evidence?" also discarded "where would it go?" — two separate questions. The
+  document type is settled in step 1, long before the doubt arises, so the folder was always knowable.
+  The tell was in the data: staged files emitted `folderConfidence` of 0.2–0.3 with `folderKey: null`, a
+  filing confidence with no filing target. The human reviewing a staged file needs to see where approving
+  it would put the document; without this the destination column read "not filed yet" every time and
+  approving dropped the file at the workspace root.
+- **`references/sweep.md` step 6:** the staging upload now sends `folder=immutFolders[folderKey]`, as a
+  protected upload does. Staging still creates **no** ledger record — recording the intended folder is not
+  filing it.
+- **`references/sweep.md` step 0: honour `action: "expire"`.** immut deletes a staged copy after 90 days.
+  Without a marker the agent finds the same uncertain file on disk, stages it again, and immut re-holds
+  bytes it just deleted on a fresh 90-day clock, forever. The file stays `classified_pending_approval` —
+  the human still has not decided — and is not re-uploaded. ⛔ **Never record `declined_by_human` for an
+  expiry.** Nobody declined it; it timed out. Saying otherwise is a false statement about a customer's own
+  decision, in a report whose whole value is that it does not make those.
+- **Real company names removed** from worked examples in `references/state.md`, `references/report.md` and
+  this changelog. The skill ships to customers; a real company named in an example is a real company named
+  in shipped software.
+
+- **Split into SKILL.md + references/ (2026-07-31, DJ).** The file was 3,487 lines against a spec guideline
+  of 500 lines / 5k tokens, and Claude Code re-attaches only the **first 5,000 tokens of a skill after
+  compaction** — so on any long session roughly 93% of it was already silently gone, including every hard
+  rule, because they sat at the bottom. A line-by-line classification found only **6.8% of the file needed
+  a language model**: 55.8% was deterministic mechanics, and ~660 lines of guardrail and rationale existed
+  only to defend those mechanics being written as prose.
+  - **SKILL.md is now 371 lines**: the judgement engine, the hard rules, the gates, a one-question setup,
+    and a router. Every safety-critical rule now sits inside the first 5k tokens, verified.
+  - **`references/` holds the mechanics** (api, taxonomy, state, sweep, scheduling, report), loaded on
+    demand at zero token cost until read. `npx skills add` copies directories recursively and preserves
+    the executable bit, so this ships as one install.
+  - **The engine block is byte-identical** (sha `01eecf29c17a`). The classification benchmark reads the
+    text between its markers, so it had to be.
+  - **Migration was extract → prove → cut.** A 173-rule inventory was built from the original file first,
+    then coverage-checked after the rewrite. **Six rules had been genuinely lost and were restored**: the
+    per-file change-detection rule (a global "modified since last sweep" bound permanently loses anything
+    edited *during* a sweep), the `skipped_out_of_scope` prohibition, the `unverified` escalation, unknown
+    config fields never meaning "do not upload", numbered choices / never a bare `exit`, and the approval
+    whitelist. The connector lifecycle was cut deliberately: the host agent owns sources now.
+  - **Fixed `scripts/classify_benchmark.py`, which the split broke.** It read both the engine block and the
+    objective taxonomy from SKILL.md; the taxonomy moved. It now reads two sources and fails loudly with
+    the reason. Caught only by running it after the split.
+  - **`docState: unknown` no longer forces an abstain**, and must never be added back. It is the step-2
+    catch-all, so it fired on every ordinary file with no execution, draft or template marker: a review
+    reproduced 187 pending items of which 7 were real. **The golden labels already disagreed with the
+    engine** — `lunch-ideas.txt` and `README.md` are `unknown` and expect `read_not_selected`,
+    `draft-patent-rotor-wip.txt` is `unknown` and expects `protect`. Re-run the benchmark before release;
+    it could not be run here (no `anthropic` SDK, no API key).
+  - Setup is one question (objective) plus the folder accept and the consents, which never merge.
+  - **A cold reader found the split had broken cross-references at scale, and it was fixed.** Renaming
+    sections in the rewrite dangled 20+ `§` citations from the reference files, two hard-rule numbers
+    (13 and 16, renumbered to 0-10), and the setup spine that four files defer to. Headings were restored
+    to the names the corpus already cites, orphaned citations repointed at real content, and all 15
+    tracked section targets now resolve. The same reader's sharpest point was that hard rule 0 delegated
+    the allow-list to a reference file: the endpoint table is now in SKILL.md itself, so an agent knows
+    what it may call before opening anything.
+  - **Setup ordering corrected.** SKILL.md had the trigger installed before the first sweep; the reference
+    files had the reverse and were right. Installing first and kicking it performs a full headless first
+    sweep with the per-file `ask` bypassed, which is the 2026-07-21 incident the ordering exists to
+    prevent. The "one question" heading was also honest-ified: one *configuration* question, plus an
+    accept and two consents that are not configuration and never merge.
+  - **Deduplication done.** The raw counts first reported (15/13/7) conflated token *usage* with
+    *restatement*; measured properly, three sites restated a rule immediately after saying the rule lived
+    elsewhere. All three are now pointers: the 429 short-pause/daily-wall split (`sweep.md`, which said
+    "do not re-derive a shorter version here" and then did), the 2ms tolerance carried inside its own
+    "the one statement of it" pointer, and Gate A's three conditions restated in `scheduling.md`. Every
+    fact now has exactly one home; the remaining mentions are field usage, not duplication.
+  - **`score` and `reasons[]` were ghost fields** — required by the approval listing, the digest and the
+    report, and never emitted by the engine. Defined once in SKILL.md as derived renderings of
+    `confidence` and `signals` (`strong` ≥ 0.75, `medium` in [0.6, 0.75)), so no engine change was needed.
+    (`undetermined_unreadable`, also reported missing, is defined in `report.md`'s decision table.)
+  - **Benchmark re-run and passing, with no API key.** `--engine file` exists for exactly this: three
+    independent in-session classification runs over the 23-file fixture, scored by the benchmark's own
+    scorer. **Accuracy 99%, self-agreement 99.7%, signal fidelity 100% (283 quotes checked).** The
+    load-bearing fields are clean: `servesObjective` 100%, `decision` 100%, `folderKey` 100%. Against the
+    recorded v4 baseline (100 / 99 / 96) that is one field on one file traded for better stability and no
+    fabricated citations. The single disagreement is `docState` on an internal invention disclosure, where
+    the engine says `unknown` and the golden label expects `issued`/`executed`; it is stable across all
+    three runs and changes no decision, so it is a question about the label, not a regression.
+  - ⛔ **The `docState` fix first shipped an answer key into the engine and it was caught by the runs.**
+    The edit cited golden-set filenames and their expected verdicts. The engine block *is* the classifier
+    prompt, so that handed the answer to the thing being measured, and one cited example was wrong on its
+    own facts (`draft-patent-rotor-wip.txt` opens "DRAFT PATENT APPLICATION", so it is `draft`, not
+    `unknown`). All three runs flagged it independently. Removed, and the engine now carries an explicit
+    rule against naming any file in it. The measurement above is from clean prompts after the fix.
+
+- **Least privilege, real endpoint discovery, and no rehearsal mode (2026-07-31, DJ).** Three changes plus
+  one new section.
+  - **New § What you may call**, near the top: every endpoint the skill may call, with scope, required
+    fields and the stop-vs-continue rule per failure. Replaces an API surface that was scattered across
+    four sections while two other places referred to "the API tables" as if one existed.
+  - **Least privilege is now a hard rule (Hard rule 0), because the API cannot enforce it.** immut resolves
+    an API key to the person who *created* it, and only an org admin can create an agent key, so
+    `/billing`, `/users` and `/webhooks` return **200** for a widened agent key. Verified against the local
+    database: an existing agent key already carries `billing:read`, `users:manage` and `webhooks:manage`.
+    The rule therefore says a response is not a grant, and forbids the surface by name.
+  - **Workspace creation removed entirely.** The skill used to call `POST /api/v1/workspaces`, which needs
+    `workspaces:write` — a scope agent keys are not issued, so it returned `403 INSUFFICIENT_SCOPE`. The
+    zero-workspace branch now stops clean and points at the app. immut creates a workspace with every new
+    organisation, so it should be unreachable. The skill never asks a human to widen a key.
+  - **`GET /api/v1/docs` is now fetched once at setup and cached to `apiContract`**, and may be used as a
+    reference for endpoint shape, field names and error codes. What did not change, deliberately: it still
+    cannot choose an endpoint, move protect off `POST /documents`, soften a gate, or add to the forbidden
+    list. A failed fetch falls back to § What you may call and says so once in the digest, rather than
+    leaving files unprotected because a documentation endpoint was down.
+  - **Auth failures now stop the sweep.** `401`, `403 API_ACCESS_DISABLED`, `403 INSUFFICIENT_SCOPE` and
+    `403 SCOPE_NOT_PERMITTED` were falling into "other 4xx", so a key revoked mid-sweep marked the
+    customer's entire back catalogue `upload_failed` and printed it under "Attempted, not protected". A
+    credential failure is not a file failure. Keyed on the status code, not the body, per the 429 lesson.
+    Also states, for all seven hard-stop rows, what happens to files that were classified and never
+    attempted — they keep their judgement, and never get `upload_failed` for an attempt that never happened.
+  - **Every mention of the rehearsal mode is gone** from the skill, the README, `PRODUCT.md` and the
+    misleading present-tense lines in `SKILL-MAINTENANCE.md`. The prohibitions were rewritten positively so
+    the guarantee survives without the phrase: never simulate protection, never report a file as protected
+    without a proof reference. Legacy-config handling was kept, expressed as a rule about unrecognised
+    fields rather than about that flag by name, because deleting it would let an old config silently
+    suppress uploading while the customer believed they were protected.
+  - Fixed a sentence the original removal left ungrammatical inside a safety callout
+    ("the tree was accepted in a written by a previous session").
+
 - **Categorization recast around three evidence areas (2026-07-23).** Following a walkthrough with DJ, the
   engine's anchor is now whether a file's contents evidence the customer's **Contracts, IP, or Compliance**.
   Four substantive changes, each verified by the benchmark and two adversarial cold-agent passes:
@@ -223,7 +347,7 @@ version — this repo has no single repo-wide version.
   so the classifier can never be less sensitive than matching was.
 - **Every reason must now be citable.** `reasons[]` entries point at something a diligence reader can
   find in the file — a quoted phrase, a named signature block, a dated approval. *"Executed by both
-  parties — signature block, Northwind Ltd and Acme Inc, dated 4 March 2024"* qualifies; *"looks
+  parties — signature block, Calderwood Ltd and Acme Inc, dated 4 March 2024"* qualifies; *"looks
   important"* does not. That column is the one a recipient tests.
 - **Bias toward protecting**, bounded by the objective: the agent must be able to name the `folderKey` a
   file serves and cite why, or it is a guess rather than a plausible candidate. `skipped_no_match` is

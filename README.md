@@ -9,7 +9,7 @@ Tools for using [immut](https://www.immut.io) from AI agents and terminals: clas
 > - **Short setup (5 questions, live):** **objective** → **accept immut folder proposal** → **connect tools to this AI** (Drive/Gmail/Teams/Slack) → **watch entire project (default)** → **always-protect drop folder** → then **automatic protection is set up for you, daily** (OS scheduler / host task / reminder — any host, local or hosted; announced, and changed or removed with `immut schedule`) → offer AGENTS.md + first sweep
 > - Phrases: `immut setup` · `immut connectors` · `immut keywords` · `immut org` · `immut schedule` · `immut sweep` · `immut protect` · `immut status` · `immut report`
 > - Live needs: endpoint (base URL), agent key, workspace id, human upload consent — the pasted connection covers all three. Scopes: `documents:write`, `documents:read`, `folders:read`, `folders:write`, `certificates:read`, `workspaces:read`
-> - **No dry run** (removed 2026-07-23): setup is live. No credentials yet → the agent guides the human to Organization Settings → AI Agents and stops clean until they have a connection.
+> - **Setup connects to immut and protects for real.** There is no rehearsal mode: the preview is the interactive first sweep, which lists every file and waits for your yes. No credentials yet → the agent guides the human to Organization Settings → AI Agents and stops clean until they have a connection.
 > - Every sweep: inventory tools; search **all available sources**; resume incomplete initial check from check-state
 > - Full rules: [`skills/immut-proof/SKILL.md`](skills/immut-proof/SKILL.md)
 > - Hash-only CLI/custom path is separate (see below), not the public skill
@@ -50,7 +50,7 @@ The skill above is **free and open-source**: you install it, connect your own to
 
 1. Sign in at [app.immut.io](https://app.immut.io) on a plan with **API access**.  
 2. Open **Organization Settings → AI Agents** (or [app.immut.io/organization/settings#ai-agents](https://app.immut.io/organization/settings#ai-agents)).  
-3. Create an **agent** API key (default name `immut-agent-skill`). Scopes are fixed for the skill (`documents`, `folders`, `certificates`, `workspaces` read/write as required).  
+3. Create an **agent** API key (default name `immut-agent-skill`). **Take the default scopes and add nothing.** The skill uses exactly the six immut issues: `documents:write`, `documents:read`, `folders:read`, `folders:write`, `certificates:read`, `workspaces:read`. It will never ask you to widen the key, and it will not call anything a wider key would unlock.  
 4. Copy the key once. Note a **workspace id** (app UI, or `GET /api/v1/workspaces`).  
 
    Integrator / Zapier keys still live under [Account → API keys](https://app.immut.io/account?tab=api-keys) — prefer the **agent** key so uploads are attributed as agent on immut and on the permanent record.
@@ -82,7 +82,7 @@ Say to the agent:
 immut setup
 ```
 
-Setup is **live** — it connects to immut and protects for real (there is no offline trial). What used to be a dry run is now the interactive first sweep: the agent lists every file it would protect and waits for your yes before anything uploads. If you have no immut connection yet, it walks you through getting one and picks up when you do.
+Setup **connects to immut and protects for real** (there is no offline trial). The preview is the interactive first sweep: the agent lists every file it would protect and waits for your yes before anything uploads. If you have no immut connection yet, it walks you through getting one and picks up when you do.
 
 **Tip:** Answer wizard prompts with **numbers** (`1`, `2`, `3`…) when the agent lists options. Avoid typing bare `exit` or `quit` — those can end a Grok/CLI session. For “sale of the business,” pick the numbered option labelled **Exit / sale of the business**.
 
@@ -295,7 +295,7 @@ Holds `lastRunAt`, `lastRunMode` (`full` \| `incremental`), per-file `mtimeMs`/`
 
 ## What setup requires
 
-Setup is **live** — there is no dry run. It needs a pasted immut connection (endpoint + agent key +
+Setup connects to immut and protects for real. It needs a pasted immut connection (endpoint + agent key +
 workspace) and your upload consent, and it stores files on immut in folders. Before anything uploads, the
 interactive first sweep lists every match and waits for your yes, so nothing is protected without you
 seeing it first. No connection yet? The agent guides you to Organization Settings → AI Agents and stops
