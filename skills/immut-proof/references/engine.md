@@ -132,6 +132,16 @@ in this order; the anchor is whether the contents evidence the customer's **cont
   approves blind and the file lands at the workspace root. Uncertainty about *whether* to protect belongs
   in `confidence`; uncertainty about *where* belongs in `folderConfidence`. Never let the first erase the
   second.
+- ⛔ **When you abstain, `servesObjective` is `true`.** Abstaining means you could not settle the
+  keep/skip call, so the field records the leaning that made you stage it rather than a conclusion you
+  did not reach. It must be `true` for two reasons, and both are structural rather than stylistic:
+  a file you are *confident* is not evidence is skipped outright and never staged, so anything reaching
+  the human queue is by definition a maybe-yes; and `servesObjective: false` alongside the non-null
+  `folderKey` the rule above requires is **self-contradictory** — "this is not evidence, file it here".
+  The router ignores this field once `confidence < 0.6` (it routes on confidence alone), so nothing about
+  the customer's outcome changes. What changes is that the record stops disagreeing with itself.
+  *Found by measurement, 2026-08-01:* across six independent runs, one emitted `false` on every abstained
+  file while five emitted `true` — the engine had never said, so the field was a coin flip.
 - Bias toward `true` for a plausibly-qualifying document the customer owns — a missed executed contract or a
   missed invention costs the customer far more than a marginal file — but "plausible" means it is a record
   of the customer's affairs you would hand a diligence reader, not enthusiasm.
