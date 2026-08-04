@@ -59,14 +59,18 @@ immut protect · live · raising funds / investor diligence
     - coffee-order.txt                    read, not selected as evidence
 
   initial sweep 62 of 254 candidates read · 192 not yet opened
+  of the 14 protected, 3 were new versions of files already on immut
   Last run 12:29 · cadence daily · sweep complete
 ```
 
 How to build it:
 
 - **Header line:** `immut protect · <objective label>`, then the date + `· <sources this run>` (e.g. `local`).
-- **The counts line:** `Read N files → protected P · waiting for you W · already safe U · left alone S ·
-  failed F · unreadable X`. `failed` is
+- **The counts line:** `Read N files → protected P · waiting for you W · queued for allowance Q ·
+  already safe U · left alone S ·
+  failed F · unreadable X`. `queued for allowance` is `awaiting_upload_allowance` — **never fold it into
+  `waiting for you`**, which tells the customer to go and do something they cannot do, and never into
+  `failed`, which says their evidence broke when their plan simply ran out. `failed` is
   `upload_failed` and `unreadable` is `undetermined_unreadable`; like every other term they are **omitted
   when zero**, and like every other term they must appear when they are not — a run that dies on an
   exhausted quota otherwise reads `protected 0 · left alone 0`, which describes nothing happening rather
@@ -117,11 +121,28 @@ How to build it:
   not invent extra sections" is an argument for dropping the single failure a customer can act on
   (an exhausted upload quota) and the files nobody looked at. **Neither ever appears under `LEFT ALONE`**:
   one broke and one was never opened, and that section says a decision was made.
-- **Initial-sweep progress line**, printed above the footer on every run until `initialSweep.status` is
-  `complete`: `initial sweep 62 of 254 candidates read · 192 not yet opened`. Both numbers come from
-  state (`plan.candidateCount` and what has actually been read) — **never an estimate of when it will
-  finish**, which belongs only to the § Sizing the first sweep question and to nowhere that outlives it.
-- **Footer:** `Last run <time> · cadence <x> · sweep <complete|in progress>`. **Qualify the cadence unless it is real:** print a bare `cadence daily` only when Gate A2 holds **and** the mechanism is an always-on host. **When Gate A2 holds and the mechanism is wake-dependent** (`launchagent`, `cron`, systemd user timer, Task Scheduler) print `cadence daily (while this Mac is on)` — naming the actual machine — **and put Gate A's second sentence on the line below the footer**: `a run due while it is asleep starts at the next wake, so gaps can be longer`. The parenthetical alone carries only half the qualifier: it says runs need the machine on, and drops the half that tells the customer a week away produces **one** catch-up run rather than seven. That second half is the one that changes behaviour, so it is not optional and the footer is too short to hold it. ⛔ **Every variant here is keyed on the gate first, never on `mechanism` alone.** A Tier 3 reminder is often installed *as a cron job* (§ Host schedule snippets), so `mechanism: cron` with `reminderMode: reminder` is a normal, working config — and keying on the mechanism would print a machine-on caveat and catch-up-on-wake behaviour for a desktop notification that protects nothing. Below A2, use the trigger-state variants: print `cadence daily (manual trigger)`, or `cadence daily (drop folder only)` when a verified trigger is installed but unattended upload is not live-consented. A bare `cadence daily` on a manual setup asserts a schedule that does not exist, on the one screen the customer is most likely to show someone else — and on a laptop it asserts one that only holds while the lid is open. **These variants and that extra line are required output, not decoration:** the shape-exact rule below governs sections, grouping and order, and never licenses dropping a qualifier Gate A requires.
+- **Outstanding-work line**, printed above the footer **whenever anything is still unopened — not only
+  during the initial sweep**: `initial sweep 62 of 254 candidates read · 192 not yet opened`, or after the
+  initial sweep has completed, `192 files found and not yet opened`. The count is the number of manifest
+  entries whose `state` is `seen` (`references/state.md`); during the initial sweep the denominator is
+  `plan.candidateCount`. **Never an estimate of when it will finish**, which belongs only to the § Sizing
+  the first sweep question and to nowhere that outlives it.
+
+  ⛔ **Do not key this to `initialSweep.status`.** It used to print only until that field read `complete`,
+  which meant a backlog arriving *later* — a Drive connector added in month two, a scope the human widened,
+  a folder that appeared — was invisible in every channel the customer sees. § Operating loop step 2
+  already treats a late backlog as a first-class case and re-makes the sizing offer; the progress
+  disclosure has to match, or the customer is asked once and then never told how it is going. Key it to
+  **is anything still unopened**, which is now a fact you can read straight off the manifest.
+
+- **Updated-files line**, printed above the footer when any file was re-protected this run:
+  `of the 14 protected, 3 were new versions of files already on immut`. ⛔ **Say this separately rather
+  than letting a version disappear into `protected`.** A first-time protection and a fifth revision of a
+  contract are different events and the second is the one that proves the product's actual claim — that
+  protection keeps up as files change. Count entries that took a `POST /documents/<id>/version` this run
+  (they carry a fresh `versionDocumentId`). ⚠️ It is a **subset** of `protected`, never an addition to it:
+  print it as "of the P protected", never as its own term in the counts line, or the numbers stop summing.
+- **Footer:** `Last run <time> · cadence <x> · sweep <complete|in progress>`. **Qualify the cadence unless it is real:** print a bare `cadence daily` only when Gate A2 holds **and** the mechanism is an always-on host. **When Gate A2 holds and the mechanism is wake-dependent** (`launchagent`, `cron`, systemd user timer, Task Scheduler) print `cadence daily (while this Mac is on)` — naming the actual machine — **and put Gate A's second sentence on the line below the footer**: `a run due while it is asleep starts at the next wake, so gaps can be longer`. The parenthetical alone carries only half the qualifier: it says runs need the machine on, and drops the half that tells the customer a week away produces **one** catch-up run rather than seven. That second half is the one that changes behaviour, so it is not optional and the footer is too short to hold it. ⛔ **Every variant here is keyed on the gate first, never on `mechanism` alone.** A pre-2026-07-31 config can carry `mechanism: cron` with `reminderMode: reminder` — a reminder that was installed as a cron job back when the skill wrote OS jobs — which is a normal config to READ — and keying on the mechanism would print a machine-on caveat and catch-up-on-wake behaviour for a desktop notification that protects nothing. Below A2, use the trigger-state variants: print `cadence daily (manual trigger)`, or `cadence daily (drop folder only)` when a verified trigger is installed but unattended upload is not live-consented. A bare `cadence daily` on a manual setup asserts a schedule that does not exist, on the one screen the customer is most likely to show someone else — and on a laptop it asserts one that only holds while the lid is open. **These variants and that extra line are required output, not decoration:** the shape-exact rule below governs sections, grouping and order, and never licenses dropping a qualifier Gate A requires.
 - **Files filed to the workspace root** (`filedToRoot: true`) go under their own heading `WORKSPACE ROOT (folder unavailable)`, never under the folder they were *meant* for. This heading is part of the template, not an extra section. Printing a root-filed file under `CONTRACTS / EXECUTED` describes a filing structure that does not exist — the report has the same rule, and the digest is read by more people.
 - The root-fallback disclosure is a line under that heading: `N filed to workspace root, folder missing, re-run setup`. No em dash (the digest bans them), and it is required, not optional.
 - **§ Automatic protection step 6 binds the digest too.** Everything you say here about future runs is subject to it.
@@ -132,8 +153,8 @@ Rules:
   The screen may be shared, and the term is the customer's own codename.
 - **No transaction hashes, no proof references, no "on-chain"/"blockchain"/"ledger" words.** The digest
   answers *what did it do and why*. The verifiable references live in `immut report` and on the
-  certificate, where they are clickable. **The Report line's salt *count* is required and is not a proof
-  reference** — a number is not a key. Salt *values* never appear in the digest.
+  certificate, where they are clickable. **No salt count either** — the skill has held no salt since
+  2026-08-03, so a count would be a warning about something that is not there.
 - **No em dashes** (use ` · ` and ` → `). **No emoji.** Markers are ASCII `+ = -`.
 - Do not say "hashed for immut" or "created proof hash".
 
@@ -143,21 +164,22 @@ the run history.
 
 ```
   Report: immut-reports/immut-protection-report-2026-07-21T113535Z.html   (13:35 local)
-          contains 12 proof salts · gitignored · do not publish
+          gitignored · do not publish
 ```
 
-Build the second line from three independent facts, not one:
+Build the second line from two independent facts, not one:
 
-- **`contains N proof salts`** — N is the number of rows **in the file you just wrote** whose `proofNonce`
-  is non-null. **Not** this run's upload count: section 1 also lists `unchanged_since_check` and
-  `already_registered_elsewhere` rows, which carry salts too. On a steady-state project this run protects
-  0 files and the report still embeds hundreds. Print the line whenever N is above zero.
 - **`gitignored`** — only when the two-command test passed for **both** `immut-reports/` **and**
-  `immut-check-state.json`. Otherwise `NOT gitignored · do not commit`, naming which one failed. A report
-  that is ignored while check-state is tracked leaks the same salts by the other route, and a bare
-  `gitignored` there is true about the report and false about the leak.
-- **`do not publish`** — **always**, even at zero salts. Any report lists file paths, and
-  paths like `invention-disclosure-*` are themselves disclosure.
+  `immut-check-state.json`. Otherwise `NOT gitignored · do not commit`, naming which one failed.
+- **`do not publish`** — **always**. Any report lists file paths, and paths like
+  `invention-disclosure-*` are themselves disclosure. This holds even though the report no longer carries
+  verification keys: **the filenames alone are the disclosure**, which is why the line is unconditional
+  rather than tied to a count.
+
+⛔ **`contains N proof salts` is gone, and do not reinstate it.** It was an honest disclosure of a real
+hazard, and the hazard itself was removed on 2026-08-03 — the skill no longer fetches or stores a salt
+(§ Recording the proof reference in `references/api.md`). Printing a salt count now would be a warning
+about something that is not there, which teaches a customer to ignore the line.
 
 The filename is UTC; print the local time beside it, or a customer outside UTC cannot match the digest to
 the file. An unattended run writes the same lines to its log.
@@ -478,7 +500,7 @@ If files have appeared since the last run, the honest response is to tell the hu
 
 **The organisation name is settled at setup, not mid-sweep.** It heads the report, and interrupting a run to ask for it is how it ends up unset: on 2026-07-22 the question arrived in the middle of a sweep and the human said "leave it".
 
-- **Live:** you have already read the workspace before Q2 (§ Connect first, then propose). **Copy the workspace name verbatim** into `orgName` at setup checkpoint 1 (trim whitespace, nothing else), and **say where it came from, once**, in the setup summary: *"I'll head reports 'acme-dataroom' (your workspace name) — say `immut org <name>` to change it."* Derived-and-disclosed is not invented; the rule is against making one up silently, and this does neither. **No new wizard question** — it is a label, not a configuration choice.
+- **Live:** you have already read the workspace before Q2 (§ Connect first, then propose). **Copy the workspace name verbatim** into `orgName` at § Canonical sequence step 2 (trim whitespace, nothing else), and **say where it came from, once**, in the setup summary: *"I'll head reports 'acme-dataroom' (your workspace name) — say `immut org <name>` to change it."* Derived-and-disclosed is not invented; the rule is against making one up silently, and this does neither. **No new wizard question** — it is a label, not a configuration choice.
 
   ⛔ **Verbatim means verbatim: no capitalisation, no tidying, and above all no legal suffix.** A workspace called `acme` becomes `acme`, never `Acme Ltd`. Adding "Ltd" is not derivation, it is an assertion about which legal entity this is, printed at the top of a document handed to investors and attributed to the customer's own words. The disclosure sentence is what makes copying acceptable, and it stops being true the moment you improve the string. If the result looks scruffy at the head of a report, that is information: say so and offer `immut org <name>`.
 - **No usable workspace name:** leave it absent, head the report **"Organisation not recorded"**, and mention `immut org <name>` once in the session. Never guess it from a directory name, a git remote, or an email domain — those are inferences about the customer's legal identity, and this document is handed to investors.
@@ -498,26 +520,42 @@ which is why there is no longer any "ask before overwriting" rule — nothing is
 location and one naming rule for **every** report, automatic or manual.
 
 > ⛔ **`immut-reports/` AND `immut-check-state.json` must both be gitignored, and the check runs before
-> EVERY report write — in every mode.** Check-state carries `proofNonce` for every protected file: the
-> same verification keys the report rule exists to protect, in a file the rule used to ignore. Not at the credential step: that is live-only and is skipped entirely by both the recommended
-> env-credential headless path and the guide-to-credentials path, which are precisely
-> the runs that would otherwise write salted reports into an unignored directory.
+> EVERY report write — in every mode.** **The reason changed on 2026-08-03 and the rule did not.** Neither
+> file carries a verification key any more (`proofNonce` was removed), but both list **file paths**, and a
+> path like `invention-disclosure-rotor-v2` or `redundancy-consultation-list` is disclosure on its own —
+> it names what the customer is working on to anyone who reads the repo. Not at the credential step: that
+> **The check runs before every report write, and not at the credential step** — that step is live-only
+> and is skipped entirely by both the recommended env-credential headless path and the
+> guide-to-credentials path, which are precisely the runs that would otherwise write these files into an
+> unignored directory.
 >
 > Use the **same two-command test as `.env`**, on **each** path, and act on all three outcomes:
 > - `git check-ignore -q <path>` **succeeds** and `git ls-files --error-unmatch <path>` **fails** →
 >   say `gitignored`. Run it for `immut-reports/` and for `immut-check-state.json`.
 > - not ignored → add it to `.gitignore`, re-check, then say it.
 > - **already tracked**, or **not a git repo** → **do not print the word `gitignored`**. Print
->   `NOT gitignored · do not commit` and tell the human. **For an already-tracked `immut-check-state.json`
->   the `.env` remedy does not apply: salts cannot be rotated.** They are bound to ledger records that
->   already exist, so the proof salt for every already-protected file is in that repository's history
->   permanently, and anyone with repo access plus a copy of a file can confirm it against the public
->   record. Untracking prevents new leakage only. Say that plainly in the session; adding the ignore rule
->   is not a fix. A directory tracked before the rule existed keeps
->   being committed despite the pattern, which is the exact trap the `.env` rule's second command catches.
+>   `NOT gitignored · do not commit` and tell the human. Untracking prevents new leakage only: what is
+>   already in the history stays there. A directory tracked before the rule existed keeps being committed
+>   despite the pattern, which is the exact trap the `.env` rule's second command catches.
 >
-> Every report embeds proof salts, and a salt is a verification **key** — Rule 8 forbids publishing a
-> salted report, and a report committed to a repo that later goes public is exactly that.
+> ⚠️ **An install that predates 2026-08-03 still has salts on disk. Test for it, do not guess.** The
+> trigger is falsifiable, cheap, and **stays inside Rule 0**: a `proofNonce` key present anywhere in
+> `immut-check-state.json`, which you already read. ⛔ **Do not go looking in `immut-reports/` for a salt
+> column** — that means listing a directory and opening a file that is neither state nor config, which
+> Rule 0 forbids and which the gitignore exemption does not cover. There is no schema-version
+> discriminator (check-state was not bumped), so without this one test an agent either skips the warning
+> or fires it at every customer with a reports folder, telling a brand-new user their fresh report holds
+> unrotatable keys.
+>
+> **The remedy has two halves, because the trigger fires on check-state.** Tell the human to delete
+> `immut-reports/` **and** say that their existing `immut-check-state.json` holds a key per protected file
+> until it is replaced. Do not strip the field silently: state it, so they can decide whether the file has
+> already been synced or committed somewhere. Removing the field stops new ones
+> being written; it does not clean up the old. Where `immut-reports/` or a check-state written before that
+> date exists, tell the human plainly: those files contain verification keys, the keys **cannot be
+> rotated** (they are bound to ledger records that already exist), and the remedy is to delete the report
+> folder. If they were ever committed, the keys are in that repository's history permanently and anyone
+> with repo access plus a copy of a file can confirm it against the public record.
 
 **Three content sections, in this order, then the technical appendix. Do not add a fourth *section*.**
 Rule 1's disclosure belongs inside section 3, not in a section of its own. The appendix (§ How to verify
@@ -528,6 +566,25 @@ that rule exists to prevent. It is method.
 
    **Never print a row as Protected when its `documentId` is null.** `stored` or `unchanged_since_check` with no `documentId` is a state-file inconsistency, not a protected file. Print it as `record incomplete, not verifiable` and raise it with the human in the session.
 
+   ⛔ **A `record incomplete` note may state the CONDITION. It may not promise the REMEDY.** Say what is
+   wrong with the row — *"the file changed after it was proved, so this record covers the earlier
+   version"* — and stop. Do **not** append *"the next run will protect the current version"*, or any
+   sentence that has a future run protecting anything. That is an unattended-protection claim, so it is
+   **Gate A's**, and Gate A binds it *"in ANY channel … session, digest, agent file, report"*. A report row
+   is the easiest place in the skill to forget that, because you are reasoning about Gate P at the time.
+   If the customer needs to know what to do, put the action on **them**: *"re-protect it to get a record
+   for the current file."*
+   *Measured, not theorised:* on 2026-08-04, 3 of 33 generated sentences over-claimed and **all three were
+   this shape** — a correct not-verifiable verdict followed by an unqualified promise about a future run
+   (`OUTSTANDING.md` O-41). The verdicts were right every time; the sentences leaked.
+
+   ⛔ **Never write "byte-for-byte", "identical", or "unchanged content" about a protected row.** Gate P
+   compares `proofForMtimeMs` and `proofForSizeBytes` — a **version** check, not a content check. It
+   catches a file edited after it was proved; it does not compare bytes, and two different files can share
+   a size and a timestamp. The honest phrasing is *"the proof on record was taken for this version of the
+   file"*. A reader who checks a "byte-for-byte" claim and finds it rests on a timestamp concludes the
+   whole pack is overstated.
+
    **If `filedToRoot` is `true`, do not print the intended `folderPath`.** Check-state records
    `folderPath` at *classification* time, before the root fallback happened, so printing it describes a
    filing structure that does not exist: the file is loose at the workspace root. Print
@@ -535,14 +592,34 @@ that rule exists to prevent. It is method.
 
    **Any pending row changes section 1's heading, not just its contents.** *"Protected and
    independently verifiable"* over a section containing eleven `classified_pending_approval` rows is false
-   for eleven of them, and a skimming investor reads the heading, not the sub-heading. Whenever any
+   for eleven of them, and a skimming investor reads the heading, not the sub-heading.
+   ⛔ **`awaiting_upload_allowance` rows count for this rule exactly as pending ones do.** They are
+   unprotected and carry no proof, so a heading claiming everything below it is independently verifiable is
+   just as false over them — and there can be far more of them, because a back catalogue meets a monthly
+   allowance. A cold run on 2026-08-04 kept the unqualified heading over 34 allowance rows, reasoning that
+   the rule named only `classified_pending_approval`. It did, and that was the defect. Whenever any
    pending row exists, head section 1 **"Protected, and waiting for your approval"**, say in the report's
    first line how many are protected and how many are waiting, and give section 3 a **pending count**
    alongside its protected and excluded counts. The all-pending case (say so in the first line) is the
    extreme of this rule, not the whole of it — one `stored` row must not buy an unqualified heading for
    the rest.
 
-   **The Verify column is present whenever any row's decision is `stored` or `unchanged_since_check`.**
+   **The Verify column is present whenever any row's decision is `stored`, `unchanged_since_check` or
+   `already_registered_elsewhere`.**
+
+   ⛔ **`already_registered_elsewhere` is in that list, and its cell has defined content.** That row is
+   genuinely protected (`api.md` § Upload responses) but the 400 body returns only `existingDocumentId` —
+   no transaction, no network — and since 2026-08-03 nothing may fetch one. So the cell says
+   **`reference held by immut — open this document in the app`**, and per Rule 9 the row carries **no
+   permanence claim**. Never leave it blank: blank reads as "pending upload" on a file that is protected,
+   which is the softer-claim failure the pending-row rule below exists to stop. Never move the row to
+   section 2 to avoid the gap either — that tells an investor a protected file was excluded.
+
+   ⛔ **A salted row's "how a third party checks it" cell must name the missing half.** Since the report
+   carries no key, the cell reads **`ledger record + your immut pack or certificate`**, not a bare
+   "verify" that implies this document is sufficient. The appendix explains the mechanics; the cell is
+   where a skimming reader actually looks.
+
    Both decisions are in that rule deliberately: after the first run, rows migrate from `stored` to
    `unchanged_since_check`, so a steady-state project has **zero** `stored` rows, and keying on `stored`
    alone strips every verification link out of a report still headed "Protected and independently
@@ -553,10 +630,67 @@ that rule exists to prevent. It is method.
    it reads as "pending upload", a much more comfortable claim than "this needs your yes before anything
    happens".
 
+   **`awaiting_upload_allowance` is its own sub-heading inside section 1: "Qualifies, not yet protected,
+   waiting on your immut allowance".** Same placement logic as the pending sub-table below and the same
+   ban on section 2 — nobody excluded these files. **Say what is true and stop there:** they were read,
+   they qualify, and the plan's allowance ran out before their turn. ⛔ **Do not say when they will be
+   protected.** *"240 queued"* is a count. *"protected next month"* is a future run protecting something,
+   which is an automation claim **Gate A binds in every channel including this one** — the same rule that
+   stops a `record incomplete` row promising a re-protect.
+
+   ⛔ **The remedy you offer depends on `uploadBudget.kind`, and this is the one place it is written
+   down.** Both the row's note and the digest line take their wording from here; § Sizing's offer cites
+   this rule rather than restating it.
+
+   | `kind` | Say | Never say |
+   |---|---|---|
+   | `monthly` | the allowance refills at the start of the next period | *"add allowance to your plan"* — **never upsell a customer whose allowance returns on its own.** Buying is a choice they may make to go faster, not the remedy. Also never *"the queue drains into it"* — see below |
+   | `trial_one_time` | it is a one-time credit and **does not refill**, so nothing will reset | anything implying they can wait |
+   | `unknown` | the allowance ran out, and you do not know which kind it is | any number, and any remedy that assumes one |
+
+   ⛔ **"The allowance refills" is a fact about billing. "The queue will drain into it" is a claim about a
+   future run, and Gate A owns that one.** Whether anything gets uploaded next period depends on whether a
+   verified trigger exists and unattended upload is on — on a manual setup the queue drains only when the
+   human runs a sweep. So state the refill, and say **who starts runs** if you say anything about the queue
+   at all, exactly as Gate A requires everywhere else.
+   *Found by measurement within an hour of this table being written:* the first draft of the `monthly` row
+   said *"and the queue drains into it"*, a cold run repeated it verbatim to a customer, and it is the same
+   defect as O-41 — a report sentence quietly promising a future run will protect something.
+
+   *Found by measurement, 2026-08-04:* given only the sub-heading rule, a cold run wrote *"add allowance to
+   your immut plan and run the sweep again"* for a **monthly** account whose allowance refilled days later.
+   The rule existed, in `references/sweep.md`, and the agent writing a report row had no reason to be
+   reading it.
+
+   ⛔ **A templated family is reported as a family, not as 119 separate refusals.** When one member was
+   protected as the representative (`references/sweep.md` § Templated families), print the representative
+   as a normal protected row and give the rest **one line**: *"119 further counterparts of the same
+   agreement, listed and not protected — you chose to protect one as the representative."* Naming them
+   individually buries the distinct evidence a diligence reader came for, and filing them under
+   *"Deliberately excluded"* would be false twice over: the customer chose an **ordering**, not 119
+   declines, and the ones nobody opened were never judged at all. Members that were **read** are
+   `awaiting_upload_allowance`; members never opened are **uncovered scope** and belong in section 3 with
+   the rest of the not-opened count.
+
+   **The Verify cell for these rows reads `not uploaded, no allowance left`.** ⛔ **Never leave it blank.**
+   Blank is what an `already_registered_elsewhere` row uses — a file that genuinely *is* protected and
+   whose reference simply cannot be fetched. These files have no proof at all, so a blank cell tells a
+   diligence reader the opposite of the truth about the one thing that matters.
+
    **`classified_pending_approval` is a sub-heading inside section 1: "Qualifies, not yet protected, waiting for your approval".** It is not a fourth section and it is not an exclusion. These rows carry no `documentId` and no Verify link, and they must never appear under the Protected heading — but filing them in section 2 tells the reader the agent *decided against* files it actually selected, which is the 2026-07-22 failure in written form. State plainly, above the sub-heading, that these are protected by one action from the customer and nothing else stands in the way. If a report contains **only** pending rows and no protected ones, say so in the first line: the pack proves nothing yet.
 
    **`unchanged_since_check` belongs HERE, not in section 2.** A file protected on an earlier run and unchanged since is *still protected*. It is the majority case on every run after the first. Filing it under “excluded” tells a customer their protected contracts were excluded, in a document they hand to an investor. This is the single easiest way to make this report actively wrong.
 2. **Deliberately excluded, and why** — every file **in the state file** whose decision is a `skipped_*` code, with its reason translated using the table below. `unchanged_since_check` is **not** a skip and does not belong here. Files excluded before classification (`node_modules`, `.env`, `*.pem`) are not in state and do not belong here either. Never drop this section to make the pack look fuller: a pack with no exclusions reads as indiscriminate, which is worse.
+
+   ⛔ **The ban on promising a future run applies here too, and this is where it is most tempting.** A
+   `skipped_draft_wip` row describes a draft that genuinely *may* be protected later, when it is signed —
+   so *"it will be protected as a version then"* reads as helpful and is an **automation claim**, which
+   **Gate A binds in every channel including this one**. State the condition and stop: *"a draft, so not
+   protected. It qualifies once it is executed."* Put any action on the customer, never on a future run.
+   *Found 2026-08-04, on the third occurrence of this shape in one day:* the rule was written for section
+   1's `record incomplete` and allowance rows because that is where it was first observed, and it leaked
+   straight into section 2. **The rule is about the claim, not the section** — it holds anywhere a row can
+   describe something happening later.
 3. **Coverage and freshness** — `lastRunAt`, the number of entries in `files`, protected vs excluded counts, and the connectors that were **actually reached on the run being reported**. Rule 1's disclosure goes here.
 
    **Separate what was read from what was merely listed.** State the number of files **opened and judged**, and separately the scope that was enumerated but not opened — shortlisted out by type, deferred by the read cap, or `undetermined_unreadable`. These are different claims and a diligence reader is entitled to both: the first is the work, the second is the limit. Folding them into one "reviewed" figure inflates the diligence this document evidences, which is the one thing it exists to evidence. Any source swept by search rather than exhaustive enumeration says so here too — a fuzzy search that returned nothing is not a finding of absence.
@@ -566,6 +700,15 @@ that rule exists to prevent. It is method.
    not reachable during this run — not covered by this report"*. Host connectors are authenticated
    interactively, so an unreachable Drive on every scheduled run is the *likely* state, not the exotic
    one — and this is the only channel an investor actually reads.
+
+   **Say what the cadence captures, once, in section 3.** A reader seeing a file protected on eight dates
+   will assume every edit in between produced a record. It did not: the unit of capture is the **sweep**,
+   not the edit, so each row is the file **as it stood when that run read it**. Print
+   *"protected as it stood at each daily run"* alongside `lastRunAt`. Never *"every time you change it"*
+   or *"every version"*. ⛔ **The rule and its reasoning live in one place —
+   `references/scheduling.md` § What a daily cadence actually captures — and this is a pointer to it, not
+   a second copy.** Two statements of a limit drift, and the one that drifts is the one in the document
+   handed to an investor.
 
    **Never print a next-due date, anywhere, and do not reintroduce a field to hold one.** `schedule.nextDueHint` used to exist and was **deleted** on 2026-07-22: banning it here achieved nothing while `immut status` was still mandated to print it, which is the channel a customer actually looks at. A next-due date is a future-tense promise nothing guarantees — *“Next check due today”* is the most natural, most factual-*feeling* lie this skill can tell, and it survives precisely because it reads as a helpful detail rather than a claim. Report when the agent **last** ran, and who starts runs (Gate A). Never when it will next run. This applies to the report, the digest, `immut status` and the session alike.
 
@@ -585,8 +728,26 @@ there is.
 > customer's business. The three content sections keep outcome language. Do not let this exception leak
 > upward into them, and do not delete this appendix citing Rule 4 or "no fourth section".
 
-**Open with what the reader needs**, all of it already in the section 1 table: the file, its transaction
-reference, its proof salt, and its scheme.
+**Open with what the reader needs**: the file, its transaction reference and its `hashScheme` — **and say
+the scheme explicitly here**, because it selects the whole recipe and section 1 is not required to carry a
+scheme column. Plus the proof salt, which is **not in this report**: *the reader* obtains it from immut
+(the agent does not — see `api.md` § Recording the proof reference).
+
+⛔ **WHERE THE SALT COMES FROM — stated here once, for the whole skill. Everywhere else points at this
+paragraph rather than restating it**, because a limit written in six places drifts and the copy that
+drifts is the one in the document handed to an investor (the same doctrine as § The single storage rule).
+
+Since 2026-08-03 the agent neither fetches nor stores a salt: it is a verification key and it does not
+belong on the machine that did the sweeping. It reaches the reader by **two** routes, both from immut, and
+both must be named because they serve different needs: the **certificate** for a single file, and the
+**diligence pack** for a set, which carries the salt, the on-chain commitment and a one-click recipe for
+**every revision** of every file. ⛔ Do not write "the pack" alone — that drops the only route a reader
+chasing one document would use.
+
+**Do not present this as a missing piece or an apology.** For a salted proof, holding the key separately
+from the record is the design: the value on the public ledger is computed from the file's fingerprint
+*and* the salt, so the ledger alone discloses nothing about the document. Whoever is handed this report
+and needs to check it should be handed the pack too.
 
 Then offer **three routes, easiest first**. Most recipients will not open a terminal, and a verification
 method the reader will not follow proves nothing. Routes 1 and 2 need no terminal at all.
@@ -616,10 +777,10 @@ report's own test-network notice. A link that argues with the document carrying 
 the convenience.
 
 **Scheme-conditional, like route 3.** Salted row: name the field the page actually uses — **Proof
-nonce**, not "salt". Plain row: no salt is needed at all, so do not ask for one. No salt recorded on a
-salted row: do not offer route 1 for it.
+nonce**, not "salt" — and say the value comes from the certificate or the diligence pack, since this
+report does not carry it. Plain row: no salt is needed at all, so do not ask for one.
 
-### Route 2 — no terminal, and independent of immut
+### Route 2 — no terminal, and independent of immut for the ledger half
 
 **Step 1 — the record and the time.** Open the **Public record** link, which points at the explorer's
 **Detailed** tab. Two things are on that page and neither needs any conversion:
@@ -636,8 +797,11 @@ serves no such tab, send the reader to route 3 step 5 instead.)
 file — that is step 2, and a reader who stops at the satisfying explorer page has verified nothing about
 their document.
 
-**Step 2 — the hash and the HMAC.** Open the **Check this file** link. It opens CyberChef with the
-recipe and this row's salt already loaded: `SHA2(256)` → `From Hex` → `HMAC(key = the salt, as HEX)`.
+**Step 2 — the hash and the HMAC.** ⚠️ **This report can no longer emit a pre-loaded link for a salted
+row**, because building one requires the salt and the agent no longer holds it. Send the reader to the
+equivalent link in immut's diligence pack, which immut generates per revision with the salt already in it
+(§ How to verify names both routes; the certificate is the other).
+The recipe either way is `SHA2(256)` → `From Hex` → `HMAC(key = the salt, as HEX)`.
 Load the file with **"Open file as input"** — the small folder icon at the **top-right of the Input
 pane** — or drag the file onto that pane. Name the control exactly: it is unlabelled, easy to miss, and
 vanishes entirely on a narrow window.
@@ -645,8 +809,12 @@ vanishes entirely on a narrow window.
 The Output is the value to compare with `fileHash` from step 1. Equal means verified.
 
 **Tell the reader to check the recipe loaded.** Three operations, in order: `SHA2` (size 256),
-`From Hex`, `HMAC` with **Key: HEX** set to that row's salt. immut generated the link, so this is the
-check that makes the route independent — and if the recipe ever fails to load, the Output is silently the
+`From Hex`, `HMAC` with **Key: HEX** set to that row's salt. ⚠️ **Be precise about what is independent
+here, because the wording predates the salt removal.** Step 1 — reading the record off a public explorer —
+needs nothing from immut and is genuinely independent. Step 2 now begins at an immut-issued link carrying
+an immut-issued key, so it is *reproducible* rather than independent: the reader can see the recipe and
+re-run it, but the key came from immut. Say that rather than claiming more; checking the recipe loaded is
+still the step that makes it reproducible — and if the recipe ever fails to load, the Output is silently the
 raw file instead. Anything else: build the three operations by hand, or use route 3.
 
 **Scheme-conditional.** Plain (`sha256-plain-v1`): link a `SHA2(256)`-only recipe, no salt, no HMAC.
@@ -654,9 +822,10 @@ raw file instead. Anything else: build the three operations by hand, or use rout
 backend default — a plain recipe and guarantees a mismatch. A wrong recipe and a bad proof look identical
 to the reader, and the wrong-recipe case is the one that makes a genuine pack read as fabricated.
 
-> ⚠️ **Do not share that CyberChef link, before or after loading a file.** It already contains the proof
-> salt, which is a verification key — Rule 8 forbids publishing one — and once a file is loaded the URL
-> contains the file too, base64-encoded. The fragment is not *sent to the site*, but do not overclaim
+> ⚠️ **Do not share the CyberChef link from immut's diligence pack, before or after loading a file.**
+> (Since 2026-08-03 this report emits no such link for a salted row — immut's pack does, and this warning
+> is about that one.) It already contains the proof salt, which is a verification **key**, and once a file
+> is loaded the URL contains the file too, base64-encoded. The fragment is not *sent to the site*, but do not overclaim
 > that as "not disclosed to anyone": it sits in browser history (which browser sync may upload) and is
 > readable by anything running in that browser. The verify page refuses to take a salt from a URL for
 > exactly this reason; do not tell the reader it is safe here.
@@ -712,8 +881,7 @@ covers both. Do not paraphrase these commands — the encodings are exactly wher
    ```
    `Memos` sits at `result` level on some node versions and under `result.tx_json` on others, which is
    why the command tries both. Assume one and it silently prints nothing.
-   ```text
-   ```
+
    Its `fileHash` must equal step 2's output.
 
 **`sha256-plain-v1`:** skip step 2 and compare step 1's digest directly with `fileHash`.
@@ -723,9 +891,11 @@ and tell the reader to try the plain comparison first and the salted step only i
 salted branch is the *longer* recipe, so guessing it feels safe and is not: against a plain record it
 HMACs and mismatches.
 
-**Salted row with `proofNonce` null:** that row is not verifiable by whoever holds this report — the salt
-retrieval endpoint is documented as fragile, so this is expected rather than exotic. Do **not** print a
-command with an empty `hexkey:`. Label it in section 1 as `verification key not recorded` and say so here.
+**Salted rows carry no key in this report, and that is now the normal case, not a fault.** Since
+2026-08-03 the skill records no salt at all, so every salted row needs immut's diligence pack to complete
+the check. Do **not** print a command with an empty `hexkey:`, and do **not** label the row as an error or
+as `verification key not recorded` — nothing failed. Say the key is held by immut and name where the
+reader gets it.
 
 **State plainly what this proves, and what it does not.** Matching values prove the file is byte-identical
 to the one protected, and the ledger's close time proves it existed no later than then. It does **not**
@@ -746,14 +916,37 @@ which is the failure class Rule 9 exists to prevent.
 periodically reset, so the method is sound but the permanence is not — **and that after a reset the
 records are gone, so neither the match nor the time can be checked again.**
 
-**Include one worked example** using a real row from this run.
+**Include one worked example** using a real row from this run — **and pick the row by what you can
+actually run**, see the gate below.
 
-> ⛔ **Run the commands before printing them.** Compute step 2 against that row's actual file and compare
-> it with the memo's `fileHash`. If they do not match, **do not print the appendix**: say the verification
-> method could not be reproduced for this run and raise it with the human in the session. Transcribing
-> `fileHash` out of the memo and presenting it as step 2's output produces a demonstration of verification
-> that has never been demonstrated, in a document handed to an acquirer — and if the construction is ever
-> wrong, every reader who tries it concludes the pack is fabricated.
+> ⛔ **Run the commands before printing them, and be exact about which ones you can run.** Step numbers
+> below are route 3's: **1** = `shasum` digest · **2** = the HMAC under the salt · **3** = the ledger
+> lookup · **4** = the close time · **5** = compare.
+>
+> **Plain rows (`sha256-plain-v1`) — run all of it.** ⚠️ **Step 2 does not apply to a plain row at all**
+> (see the scheme branch above: *skip step 2 and compare step 1's digest directly with `fileHash`*), so
+> run 1, 3, 4 and 5. **Do not HMAC a plain row to satisfy this gate** — with no key it mismatches by
+> construction, and an earlier draft of this callout said exactly that and would have suppressed the
+> appendix on every plain report. If step 5 genuinely fails, **do not print the appendix**: say the method
+> could not be reproduced and raise it with the human.
+>
+> **Salted rows — run 1, 3 and 4; step 2 is not yours to run, and that is not a failure.** Since
+> 2026-08-03 the skill stores no salt, so the HMAC needs a value only immut has. Steps 3 and 4 still carry
+> the entire *when* claim and must still be executed.
+>
+> ⛔ **What literally goes in the `hexkey:` slot, since you have no value for it.** Print the command with
+> the placeholder **`<proof salt from your immut pack or certificate>`** — a named placeholder, never an
+> empty `hexkey:` (banned above) and never a fabricated hex string. Label the worked example
+> **"steps 1, 3 and 4 executed here; step 2 shown as the recipe — the key is held by immut."**
+>
+> ⛔ **The three wrong ways out, all of which have a tempting logic:** transcribing `fileHash` out of the
+> memo and presenting it as step 2's output, which demonstrates a verification nobody performed;
+> suppressing the appendix on every salted report, which strips the method out of the artefact entirely
+> and — since v3 is the backend default — means almost every report; and fetching a salt to satisfy the
+> gate, which re-creates the exposure this change removed and calls an endpoint the allow-list forbids.
+>
+> **Why the plain-row rule stays strict:** if the construction is ever wrong, every reader who tries it
+> concludes the pack is fabricated. Where you *can* check it, you must.
 
 **Reason codes. Use these words. Do not invent a translation from the code name.**
 
@@ -764,6 +957,7 @@ records are gone, so neither the match nor the time can be checked again.**
 | `already_registered_elsewhere` | **1** | Protected (same content already registered) | Real proof exists under another path; immut refused a duplicate of identical bytes |
 | `upload_failed` | **1**, under "Attempted, not protected" | Not protected, upload failed | It broke. It was not a choice, so it must never appear under "Deliberately excluded" |
 | `classified_pending_approval` | **1**, under "Qualifies, not yet protected, waiting for your approval" | Read, qualifies, waiting for you | You opened it, judged it evidence, and the human has not answered yet. Not a decision, not a protection — an outstanding action **they** hold |
+| `awaiting_upload_allowance` | **1**, under "Qualifies, not yet protected, waiting on your immut allowance" | Read, qualifies, queued for the next allowance | You opened it, judged it evidence, and the plan's upload allowance ran out before its turn. Nobody declined it and nothing failed — **an outstanding action neither you nor the human holds**, which is why it needs its own sub-heading rather than sharing one with `classified_pending_approval` |
 | `declined_by_human` | 2 | You chose not to protect this | An explicit no to this file. It belongs under "Deliberately excluded" because that is exactly what it was |
 | `skipped_draft_wip` | 2 | Draft or work in progress | Proving when a draft existed is not useful and can mislead in diligence |
 | `read_not_selected` | 2 | Read, not selected as evidence | You opened it and judged it did not serve the objective. This is the normal outcome for a file that was genuinely considered |
@@ -779,6 +973,13 @@ records are gone, so neither the match nor the time can be checked again.**
 
 If you meet a `decision` that is not in this table, print the raw code, put it in section 2, and say nothing about what it means. **A guessed translation becomes a confident false sentence in a document handed to an investor.** Silence is cheap; a wrong gloss is not.
 
+⛔ **That default is why a new decision code must be added to this table in the same change that starts
+emitting it.** Section 2 is headed *"Deliberately excluded, and why"*. An unlisted code therefore tells a
+diligence reader that the customer **chose** to leave the file out — when the truth may be that a plan
+limit stopped it, or a request arrived a second early. `awaiting_upload_allowance` is in this table for
+exactly that reason, and `api.md` already states the same rule for rate limits: *"Never invent a
+`rate_limited` code."* If you need a new code, add the row first.
+
 **Redact custom keywords from `reasons`.** A reason like `custom keyword Project Phoenix` leaks the customer's own unreleased codename into a document built to be sent outside. Print `custom keyword match` and never the term. Everything else in `reasons` goes verbatim.
 
 **Verification.** Use only fields present in state. Column presence follows the single rule in section 1 (present whenever any row is `stored` or `unchanged_since_check`).
@@ -786,7 +987,16 @@ If you meet a `decision` that is not in this table, print the raw code, put it i
 - `transactionHash` + `xrplNetwork` → the public record on an explorer. This is the trust-independent link: no immut account, no immut server.
 - `transactionHash` → `<backend>/api/public/verify/<hash>`. Keyless, but it **hits immut's server**, so it is a convenience, not independence. Do not describe it as trust-free. **The route is `/api/public/verify/`, not `/api/v1/public/verify/`** — the latter 404s.
 - `documentId` → the certificate.
-- `proofNonce` → show it as **Proof salt**.
+
+⛔ **This report does NOT carry a verification key, and must never claim to.** Removed 2026-08-03. A salt
+lets whoever holds this document confirm a file is byte-identical to the protected one, which is exactly
+why it belongs with the evidence and not on the machine that swept it. **Direct the reader to immut's
+diligence pack** (the customer downloads it from immut; it carries the salt, the on-chain commitment and a
+one-click verification recipe per revision, and it was verified end to end on 2026-08-03).
+
+What this report proves on its own is still real and worth stating plainly: **which files were protected,
+when, and on which ledger**, with a public explorer link that needs no immut account. What it cannot do
+alone is tie a particular copy of a file to a particular record. Say that, rather than implying more.
 
 **Say honestly what a verifier needs, and it depends on the scheme:**
 
@@ -820,9 +1030,21 @@ Label the column **“Verify”**, never “txHash”: that is chain vocabulary 
 7. **Never invent a verification link, certificate id, transaction reference, count, or timestamp.** If the state file does not have it, it does not go in.
 8. **The report is itself disclosure, in two ways.** It names files like `invention-disclosure-*` and `trade-secret-*`, and it is built to be handed to outsiders.
 
-   **Reports are now written automatically after every sweep, so the warning moves rather than disappears.** It cannot be given "before writing" when writing is unattended. Instead: the digest (and, unattended, the log) names the file, states the salt count, and says gitignored, do not publish — every run. On an interactive `immut report`, also say *“This lists file paths and folder names, not contents. Worth a look before you send it.”* and offer to redact paths to filename only.
+   **Reports are now written automatically after every sweep, so the warning moves rather than disappears.** It cannot be given "before writing" when writing is unattended. Instead: the digest (and, unattended, the log) names the file and says gitignored, do not publish — every run. On an interactive `immut report`, also say *“This lists file paths and folder names, not contents. Worth a look before you send it.”* and offer to redact paths to filename only.
 
-   **The salt count is the part that must never be dropped.** A salt is a verification **key**: whoever holds this report plus a copy of the file can confirm the file is the protected one. That is exactly the point when sending it to a named investor, and exactly why it must not be published. Salts also give up the public record's privacy property for those files: anyone holding a salt can test a guessed file against the record. **Never post a salted report anywhere public**, and keep `immut-reports/` gitignored so it cannot happen by accident.
+   **The file paths are the part that must never be dropped.** This report no longer carries a
+   verification key — the skill stopped storing salts on 2026-08-03 — so the disclosure is not the crypto,
+   it is the **names**. `invention-disclosure-rotor-v2` and `redundancy-consultation-list` tell a reader
+   what the customer is working on and what they are worried about, before anyone opens a file. That is
+   why `do not publish` is unconditional and why `immut-reports/` stays gitignored.
+
+   ⛔ **Do not restore the old justification, which said a holder of this report plus a copy of the file
+   could confirm the file is the protected one.** It was written when the report embedded salts and is
+   false for **salted** rows now: confirming a file against a salted record needs the salt, which the
+   agent no longer holds. ⚠️ **It is still true for `sha256-plain-v1` rows** — there is no key, so anyone
+   with the file and the record can check it (§ How to verify, scheme branch). So state the limit
+   *scheme-conditionally*; asserting "only immut can confirm this" across the board understates the
+   disclosure on exactly the rows where it is largest.
 
 9. **Never claim permanence for a proof on a test network — or on an unrecorded one.** This is **per row**, not per document: one null row must not silence the claim for every correctly recorded row, and one recorded row must not cover a null one. For a row whose `xrplNetwork` is null or missing, do **not** claim permanence: say the network was not recorded for it so permanence cannot be asserted, and tell the human in the session to re-check the upload response (this is exactly what the four-names trap produces, and § Recording the proof reference tells you to write `null` rather than guess — so null is *expected*, not exotic). Defaulting a missing value to the permanent claim is the single easiest way to hand an acquirer a document a technical reader can falsify in one lookup. If `xrplNetwork` is `testnet`, say the run was on a public **test network**, that such networks are periodically reset, and that proofs made there are **not permanent**. The verification works identically and the maths is the same; the permanence is not. This is the one claim a technical reader will check, and a demo is exactly where it gets made carelessly.
 
@@ -855,7 +1077,12 @@ Tier 1 setup — it contradicted what the agent had said in session minutes earl
 upsell Rule 1 forbids on **any** Tier 1/2 path, including the common `verified: false` case. Rules that
 live in prose and get revised cannot also live in Python without drifting.
 
-**You still own the output.** The script is mechanics — tables, escaping, salt fetch, verification links.
+**You still own the output.** The script is mechanics — tables, escaping, verification links.
+
+⚠️ **The script has not been updated for the 2026-08-03 salt removal.** It renders a salt column and a
+pre-loaded CyberChef link from `proofNonce` in check-state, and that field no longer exists, so those
+cells now come out empty. It never *fetched* a salt, so it creates no exposure — but do not present its
+output as a finished pack until it is either updated or retired (`webapp/OUTSTANDING.md`).
 Check the result against the rest of this section before handing it over. **Reading your own generated
 file is exempt from Rule 0's "open no other file"**: that ban is about sourcing report *content* from the
 disk, not about proofreading a document before you send it.

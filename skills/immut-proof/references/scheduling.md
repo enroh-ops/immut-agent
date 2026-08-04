@@ -33,6 +33,22 @@ Code that is `/schedule`, or the **Scheduled** section in the sidebar. Other hos
 | Two projects | One silently overwrites the other | Separate tasks, separate identities |
 | Failure | Invisible | Surfaced in the host's own interface |
 
+⛔ **What you may TELL a customer about a missed run, stated once, here.** The facts above are about the
+mechanism; this is about the sentence, and without it three cold runs gave three different answers to the
+same question on the same state (2026-08-04).
+
+| Situation | Say | Never say |
+|---|---|---|
+| Gate A2 earned, `mechanism: host_task` | the machine has to be on; a run due while it is asleep **starts at the next wake**, so gaps can be longer, and a week away produces **one** catch-up run rather than seven | *"that day's run doesn't happen"* / *"is skipped"* — that is the hand-rolled behaviour, not this one, and it understates what they get |
+| Gate A2 earned, a **hand-rolled** OS job (legacy configs only) | a run missed while the machine was off is **gone**, and nothing reports it | anything about catching up |
+| Below A2 | who starts runs, and nothing about what happens when nobody does | any catch-up claim at all — there is no trigger to catch up |
+
+⚠️ **Catching up is a property of the host's scheduler, not of immut and not of this skill.** It is true
+because the host records the missed run and re-fires it, which is the row above and the whole argument for
+Tier 1. So it may be stated for a **host-managed** task and for nothing else. And it is still bounded by
+Gate A: if A2 is not earned, none of this is sayable, because no trigger exists to miss a run in the first
+place.
+
 Every row on the right is something the skill would otherwise have to build, verify, and be honest about
 when it fails. **Do not rebuild any of it**, and do not fall back to writing a LaunchAgent, a crontab entry
 or a scheduled-task XML because it feels more controllable. It is not: it is the same job with every
@@ -59,7 +75,7 @@ no detector on the machine.
     "jobLabel": "immut protect — <project>",
     "unattendedUpload": false,
     "installedAt": "ISO-8601",
-    "announcedAt": { "at": "ISO-8601", "covered": ["unasked", "what", "where", "when", "removal", "salts"] },
+    "announcedAt": { "at": "ISO-8601", "covered": ["unasked", "what", "where", "when", "removal", "paths"] },
     "declined": false,
     "verified": true,
     "verifiedBy": { "method": "observed_fire", "command": "<how you started it through the host>" }
@@ -94,20 +110,34 @@ The moment the task exists, in the session, in plain words. Not in a log, not at
 3. **Where** it lives, precisely enough for them to find it.
 4. **When** it runs.
 5. **How to remove it**, in one instruction, plus `immut schedule` to change the cadence.
-6. **That scheduled runs write reports into `./immut-reports/`, and those reports contain proof salts,
-   which are verification keys.**
+6. **That scheduled runs write reports into `./immut-reports/`, and those reports list the customer's
+   file paths** — which is disclosure on its own, since a path names what they are working on.
 
-⛔ **Removal and salts are the two that cannot be dropped.** Without removal, the customer cannot exercise
-the only thing that makes an unasked install acceptable. Without salts, a customer on a daily schedule is
-never told to their face that a directory of verification keys is accumulating inside their project — they
-find out from a log nobody reads, or never. Say all six while a human is present; after setup there may
-never be one again.
+⛔ **Removal and paths are the two that cannot be dropped.** Without removal, the customer cannot exercise
+the only thing that makes an unasked install acceptable. Without paths, a customer on a daily schedule is
+never told to their face that a directory naming their documents is accumulating inside their project —
+they find out from a log nobody reads, or never. Say all six while a human is present; after setup there
+may never be one again.
+
+> **`salts` was the sixth item until 2026-08-03**, when the skill stopped storing verification keys
+> altogether (`references/api.md` § Recording the proof reference). The disclosure did not disappear, it
+> narrowed: reports still list **file paths**, and a path names the customer's work to anyone who reads it.
+> Do not quietly drop the sixth item on the grounds that the keys are gone.
 
 **Record what you actually said:** `announcedAt: { at, covered: [...] }`, where `covered` is drawn from
-exactly this closed set — `unasked`, `what`, `where`, `when`, `removal`, `salts` — and a complete
+exactly this closed set — `unasked`, `what`, `where`, `when`, `removal`, `paths` — and a complete
 announcement lists all six. A free-form list is a length test against a set nobody defined, which is no
 test. This is a claim you write about yourself with no evidence behind it, which is the standard Gate V
 rejects; make it specific enough that a later session can see a gap in it.
+
+⛔ **Legacy configs: `covered` containing `salts` is NOT a complete announcement.** Before 2026-08-03 the
+sixth member of that set was `salts`; it was replaced by `paths` when the agent stopped holding salts at
+all. A config written before then still lists six items, so **any check that counts them passes** while
+the customer was never told the thing that replaced it — and `paths` is one of the two members this
+section calls un-droppable. On reading a `covered` set that contains `salts`: treat the announcement as
+**incomplete**, tell the human the one part they were never told (reports and check-state list their file
+paths, so both stay gitignored), then rewrite `covered` with `salts` replaced by `paths`. Do this once,
+in an interactive run; never on an unattended one, where there is nobody to tell.
 
 **Then, separately, ask the unattended-upload question** (hard rule 6, its own message): *may scheduled
 runs upload qualifying files with no human present and no per-file confirmation?* Leave
@@ -135,6 +165,30 @@ machine is off or asleep. Every channel therefore says: *"Runs start automatical
 on. A run due while it is asleep starts at the next wake, so the gap between runs can be longer than the
 cadence."* Drop it only for a host you know stays powered. Gate A's default is ON and only a positive fact
 removes it.
+
+### What a daily cadence actually captures
+
+**THE UNIT OF CAPTURE IS THE SWEEP, NOT THE EDIT, and this is the only place that says so.** Stated here
+once because cadence lives here; every other surface points at this section rather than restating it.
+
+A sweep protects each qualifying file **as it stood when the sweep read it**. A file edited three times
+between two runs yields **one** version, holding the third edit's bytes. The first two are never read,
+never uploaded, and cannot be recovered later — the agent only ever sees the file as it is at read time
+(§ Classification step 3 reads `mtimeMs`/`sizeBytes` once per run and uploads that state).
+
+This applies to **every** file the engine protects, not only intellectual property.
+
+**Say it in these words, or words that keep the same limit:** *"protected as it stood at each daily run."*
+Never *"every time you change it"*, *"every version"*, or *"continuously"*. The gap between the two is a
+customer's assumption about what evidence exists, made about the one product whose whole job is evidence.
+
+⛔ **This is not a defect to apologise for, and do not offer to fix it.** A version costs a full upload
+against the monthly allowance, full storage, and a real ledger fee, so per-save capture would exhaust a
+seat's month in days. Daily is the deliberate trade. State the limit plainly and move on.
+
+**When a human asks "does it catch every change?"** — the honest answer is: every change is caught, at
+daily resolution. Two edits on the same day are one protected revision; an edit on Monday and another on
+Tuesday are two, each with its own proof and its own date.
 
 ### Step 4 — record exactly what you set up
 

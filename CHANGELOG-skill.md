@@ -10,6 +10,134 @@ version — this repo has no single repo-wide version.
 
 ## Unreleased (on `dev`)
 
+### 2026-08-04 — a templated family no longer eats the whole allowance
+
+**Found by watching a real sweep, not by reading** (`results/sweep-behaviour-2026-08-04/`). A run against
+3,054 files on a 20-credit trial met a Drive folder holding **120 executed supply agreements** — one
+counterparty, one term, one signing date, differing only in a counterpart number. Every one genuinely
+qualified, and the customer's recorded order put executed contracts first. **Taken literally, those 120
+would have consumed all twenty credits and the customer's MSA, NDAs, settlement, patent filing and
+invention disclosure would have got nothing.** The run escaped it only by noticing unprompted.
+
+- **`references/sweep.md` § Templated families (new).** Detect a candidate family from name shape at
+  enumeration, confirm by reading a spread of 3–6 rather than all, then **ask** — its own numbered
+  question, before any approval, because every member qualifies and choosing between them is the
+  customer's call about their own evidence, not a classification.
+- **§ Operating loop step 5: one credit per family per run**, unless `familyDecisions[]` records
+  otherwise. `protectionPolicy.order` ranks **categories** and says nothing about spending an entire
+  allowance inside one — that was the gap.
+- **Non-protected members are `awaiting_upload_allowance`, never `declined_by_human`.** An answer about
+  ordering is not 119 declines.
+- **Sampling a family is uncovered scope.** The unread members stay `seen`, count as not-opened, and
+  section 3 says so. "I read a representative" must never become "I checked them all."
+- **`references/state.md`:** `files[].family` and `config.familyDecisions[]`, both in the carry-forward
+  contract. **`references/report.md`:** a family is reported as a family, on one line, not as 119 refusals.
+
+**Two defects fixed in the same change, both observed in that run:**
+
+- ⛔ **`uploadBudget.remainingThisPeriod` was never decremented** — it still read `20` after all twenty
+  were spent, so the next run would have believed it had a full allowance and found out by hitting a 403,
+  which is exactly what the budget exists to prevent.
+- **§ Sizing option 2 is now worded as a condition**, *"the daily runs I'll set up next, if this host lets
+  me"*, rather than as a settled fact. A run promised daily runs at step 6, could not install a trigger at
+  step 7 (the host required approval for recurring automation) and had to retract. ⚠️ Deliberately **not**
+  fixed by moving the install earlier: step 6 precedes step 7 to stop a kicked trigger performing an
+  unsupervised first sweep, which is the 2026-07-21 incident.
+
+
+### 2026-08-04 — the sweep records what it found, and plans against the allowance that actually binds
+
+Two gaps, found by tracing how the initial sweep handles a back catalogue of thousands of files.
+
+**1. Nothing logged the files it found.** Only a count (`plan.candidateCount`) was persisted; an entry
+appeared in `files{}` only once a file had been *decided*, and the remaining queue was **derived** each run
+by re-enumerating and subtracting. That hid three things: nobody could see *which* files were waiting, only
+how many; the reading order was recomputed from scratch every run and recorded nowhere; and a file that was
+renamed, moved, or in a source that happened to be unreachable **left the queue with no trace** while the
+frozen denominator meant the count could never reach the total.
+
+- **`files{}` is now the manifest.** A file enters it at **enumeration**, with `state: seen`, before
+  anything is read. `state` is `seen` → `read` → `resolved`. A `seen` entry is deliberately small.
+- **Enumeration reconciles rather than defines** (`references/state.md` § Resume rules): new paths are
+  added, known paths refresh `lastSeenAt`, and a path that is absent gets **`missingSinceAt`** — the row is
+  never deleted.
+- ⚠️ **This is not the cursor coming back.** The ban on resuming from a `cursor` stands, and its reasoning
+  is untouched: a cursor is a *position* and the read order is a *priority* order, so a position cannot
+  describe a permutation. A manifest is a **set**, not a position.
+- **`band`** records the reading-order judgement at enumeration so it survives the run that computed it.
+  ⛔ A `band` is a guess about where to look next; a `folderKey` is a verdict about what something is. They
+  are never interchangeable, and § Classification step 3's *"a filename is never a reason to decide"*
+  is unaffected.
+
+**2. Sizing planned on the read cap and ignored the upload allowance.** The offer was computed purely from
+`readCapPerRun` and never mentioned uploads — while the trial is **20 uploads, one-time, never refilled**,
+paid plans are per-period with **no rollover**, and the agent **cannot look either up** because billing is
+not agent-readable. So a trial customer's twenty irreversible credits went to whatever the read order
+surfaced first, and they were never asked.
+
+- **`uploadBudget`** records what the human says in the sizing offer, corrected by the `usage` object on a
+  403. `kind` distinguishes `trial_one_time` from `monthly`, because that decides whether you tell someone
+  to wait for a reset or that no reset is coming. Unknown means say so and project nothing.
+- **`protectionPolicy.order`** is chosen **once**, and every later run spends the period's allowance in
+  that order without asking again. `immut policy` shows or changes it.
+- ⛔ **New decision code `awaiting_upload_allowance`**, in `references/report.md`'s table, routed to
+  **section 1** under its own sub-heading. This had to be added in the same change that emits it: that
+  file's default sends an unlisted code to section 2, *"Deliberately excluded, and why"*, which would tell
+  a diligence reader the customer chose to leave out files that a plan limit stopped.
+- Files never attempted are `awaiting_upload_allowance`, **not** `upload_failed` — only the file that
+  actually received the 403 failed.
+- ⛔ **Counts, never durations.** *"240 queued"* is fine; *"protected next month"* is a future run
+  protecting something, which Gate A binds in every channel.
+
+**Also:** the `score`/`reasons[]` rendering table moved from `SKILL.md` to `references/engine.md`
+§ Rendering — **outside** the ENGINE markers, so the classifier prompt and its baseline are byte-unchanged.
+`SKILL.md` had grown past its 5,000-token budget and that table was in the tail a compaction drops.
+
+### 2026-08-04 — the gates become measurable, and the skill's objective gets written down
+
+- **`SKILL.md`: § Pre-flight gates is now wrapped in GATES comment markers**, giving the five gates the
+  same single-source property the engine block has — `scripts/gate_benchmark.py` reads the shipping text
+  between them, so the measured gates and the gates that ship cannot drift. **No behaviour change to any
+  gate**; the conditions are byte-identical.
+  - ⚠️ The single-source note above the block deliberately does **not** quote the markers' literal text.
+    The first draft did, the extractor took the first occurrence, and it returned **9 characters** —
+    a benchmark about to score a model against an empty prompt and report the number as a result. The
+    harness now refuses any extracted block under 500 characters.
+- **`CLAUDE.md`: new § What this skill is for**, the canonical statement of the skill's objective — the
+  one sentence, the division of labour (judgement = the agent, proof = immut, objective/scope/consent =
+  the human), where the value and the risk both sit, what the skill deliberately is **not**, and the three
+  claims it may never make without their gate. `SKILL.md`'s opening paragraph is the runtime restatement
+  of the first of those; the change checklist now binds them together.
+  - It existed nowhere before this. Every session that touched the skill re-derived it, and the division
+    of labour — the thing that must never be reversed — survived only in prose scattered across seven
+    reference files.
+- **`CLAUDE.md`: new § Measuring the gates**, and the "prose is not verified by reading it" rule now names
+  both benchmarks rather than only the classifier's.
+
+**Why this was the gap worth closing.** The classifier had been measured six ways since 2026-07-23 —
+99% accuracy, 99% self-agreement, 100% signal fidelity over 43 files. Gates U/C/V/A/P had never been
+measured at all (`OUTSTANDING.md` O-10), which is backwards: a classifier error costs one wrong file, a
+gate error costs an unconsented upload, a "protected" claim with no proof behind it, or an automation
+promise for a job that was never installed.
+
+**What the first measurement found** (6 cold runs, gate prose byte-unchanged, no gate text was altered to
+get these numbers — `results/gate-benchmark-baseline-2026-08-04.json`):
+
+- **The gates adjudicate correctly.** Accuracy 1.0, self-agreement 1.0, fail-closed rate 1.0 across 60
+  absence judgements, false-pass 0.0 across 120. Every cited field's claimed state matched the fixture
+  (568 checks), and the field that actually decided each case was cited every time.
+- ⛔ **The SENTENCES still over-claim: 3 of 33 (9.1%).** All three are Gate A arriving through a channel
+  its author was not thinking about Gate A in — a Gate P report row that correctly prints `record
+  incomplete, not verifiable` and then closes *"the next run will protect the current version"*, wake
+  qualifier dropped. Filed as **O-41**; the fix is prose in `references/report.md`, not in a gate. **A
+  model can adjudicate every gate perfectly and still over-claim the moment it is writing to a customer
+  rather than judging** — which is the entire argument for measuring the two layers separately.
+- ⚠️ **A clean score is not evidence until the corpus is shown to discriminate.** Deleting *"Absent is
+  never a pass"* changed nothing, which says more about the corpus than the prose (**O-42**): every
+  absence case removes a field the gate itself names, so the specific condition already carried it.
+  Deleting Gate C's third branch flipped exactly one case of thirty in 3/3 runs — that is what proves the
+  benchmark reads the text.
+
 ### 2026-08-01 — staged files carry a destination, and an expired file does not come back
 
 - **`references/engine.md` step 3: `folderKey` is now required for every file that could reach immut**,

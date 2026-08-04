@@ -15,12 +15,11 @@ Every endpoint here is reachable with the six scopes an agent key is issued. Not
 | `GET $API/api/v1/folders?workspace=$WS&parentFolder=<id>` | `folders:read` | — | Enumerate one parent's children | As above |
 | `POST $API/api/v1/folders` | `folders:write` | `{name, workspace, parentFolder?}` | Create a folder the accepted tree needs | `already exists` → re-query, take the existing id. Otherwise do not start the sweep |
 | **`POST $API/api/v1/documents`** | `documents:write` | multipart `file`, `workspace`, `folder?`, **`agentClassification` (send it every time)** | **Protect a file. This is the only protect action.** | § Upload responses |
-| `POST $API/api/v1/documents/<id>/version` | `documents:write` | multipart `file` | Protect a changed file already on immut. **No `folder`** — immut does not re-file a version | § Upload responses |
-| `GET $API/api/v1/proofs/<id>?includeSalt=true` | `documents:read` | — | Read `proofNonce` for salted schemes, same pass as the upload | Record the proof without the salt; say the salt is missing rather than omitting the file |
+| `POST $API/api/v1/documents/<id>/version` | `documents:write` | multipart `file` + `agentClassification` | Protect a changed file already on immut. **No `folder`** — immut does not re-file a version | § Upload responses |
 | `GET $API/api/v1/agent/review` | `documents:read` | — | **Recover a lost `reviewDocumentId`.** Lists files already staged and awaiting a human | Read it before staging anything if your check-state is missing ids. Re-uploading instead creates a DUPLICATE the human must decide twice |
 | `GET $API/api/v1/agent/instructions` | `documents:read` | — | **Every sweep, before classifying.** Decisions a human made in the immut app for you to apply | `protect` = upload that path now, skipping the engine; `reject` = record `declined_by_human`. Gate U still applies to `protect` |
 | `PATCH $API/api/v1/agent/instructions/<id>` | `documents:write` | `{status:"applied", runId}` | Report that you carried one out | **After** you act, never before. A wrongly-applied mark is never retried |
-| `POST $API/api/v1/agent/runs` | `documents:write` | JSON run summary (+ optional `decisions[]`, consent-gated) | Report every sweep to immut, always | Ignore the response entirely; never retry in a loop; never mention it in the digest. `decisions[]` carries names of files you did **not** protect: send it only when `config.reportDecisions` is true (§ Protection report) |
+| `POST $API/api/v1/agent/runs` | `documents:write` | JSON run summary (+ optional `decisions[]`, consent-gated; + optional `unreadableGroups[]`, metadata only) | Report every sweep to immut, always | Ignore the response entirely; never retry in a loop; never mention it in the digest. `decisions[]` carries names of files you did **not** protect: send it only when `config.reportDecisions` is true (§ Protection report) |
 | `GET <backend>/api/public/verify/<txHash>` | **none, keyless** | — | The link a third party follows. Note the path is `/api/public/verify/`, **not** `/api/v1/public/verify/` | It is a link you print, not a call you depend on |
 
 ### Never call these
@@ -198,7 +197,7 @@ credentials yet. Ask the human **once**:
 
 **If they have no immut connection, guide them to one — do not fall back to running without it.** "Paste
 what immut gave you" assumes immut has given them something. Someone who has no account or no agent key
-has nowhere to paste from, and there is **no local rehearsal to drop them into** any more. The honest
+has nowhere to paste from, and **there is nowhere else to put them**. The honest
 move is to show them how to get the connection, and if they cannot finish now, to stop cleanly and pick
 it up when they can. Say this:
 
@@ -237,7 +236,7 @@ say `immut setup` whenever you have it and I'll pick this up.
 
 Accept the pasted block **or** the values one at a time. Then:
 
-1. **Secret → `.env` (never the config).** **Append/update** `IMMUT_API_KEY=…` in the project's `.env` (do **not** overwrite an existing `.env` — preserve other entries) and ensure **`.env`, `immut-reports/` and `immut-check-state.json`** are all in `.gitignore` (create/append if missing). Reports embed proof salts, and **so does check-state** — it carries `proofNonce` for every protected file, which is the same verification key by another route. A single `git add -A` would commit the lot into a repo that could later go public. **Verify it is actually ignored:** the claim is authorised only when **both** `git check-ignore -q .env` **succeeds** (it matches an ignore rule) **and** `git ls-files --error-unmatch .env` **fails** (the file is not already tracked — a `.env` committed before the rule existed stays tracked and keeps being committed *despite* the pattern, so check-ignore alone is not enough). Do **not** accept a substring match in `.gitignore` (a commented `# .env`, or `.env.example`, does **not** ignore the file). Only then say *"wrote your key to `.env` and confirmed it is gitignored."* If `.env` is already **tracked**, warn the human that the key is exposed in git and must be rotated + untracked. If it is simply **not ignored**, fix `.gitignore` and re-check. If the project is **not a git repo**, say so and skip the ignore claim rather than asserting it. **Never** put the key in `immut.config.json`, and **never echo, quote, or summarise the key back** to the human or into any other file — acknowledge receipt without repeating its value.
+1. **Secret → `.env` (never the config).** **Append/update** `IMMUT_API_KEY=…` in the project's `.env` (do **not** overwrite an existing `.env` — preserve other entries) and ensure **`.env`, `immut-reports/` and `immut-check-state.json`** are all in `.gitignore` (create/append if missing). Reports and check-state both list the customer's **file paths**, and a path like `invention-disclosure-rotor-v2` names what they are working on to anyone who reads the repo. A single `git add -A` would commit the lot into a repo that could later go public. (Neither file has carried a verification key since 2026-08-03 — see § Recording the proof reference — but the paths alone justify the rule.) **Verify it is actually ignored:** the claim is authorised only when **both** `git check-ignore -q .env` **succeeds** (it matches an ignore rule) **and** `git ls-files --error-unmatch .env` **fails** (the file is not already tracked — a `.env` committed before the rule existed stays tracked and keeps being committed *despite* the pattern, so check-ignore alone is not enough). Do **not** accept a substring match in `.gitignore` (a commented `# .env`, or `.env.example`, does **not** ignore the file). Only then say *"wrote your key to `.env` and confirmed it is gitignored."* If `.env` is already **tracked**, warn the human that the key is exposed in git and must be rotated + untracked. If it is simply **not ignored**, fix `.gitignore` and re-check. If the project is **not a git repo**, say so and skip the ignore claim rather than asserting it. **Never** put the key in `immut.config.json`, and **never echo, quote, or summarise the key back** to the human or into any other file — acknowledge receipt without repeating its value.
 2. **Endpoint + workspace → `immut.config.json`.** Set `apiBaseUrl` (if given) and `workspaceId` (if given). These carry no secret and are safe to commit.
 3. **Workspace: verify, then fall back.** With `$API`/`$KEY` set, confirm the pasted workspace via `GET $API/api/v1/workspaces`. If it isn't there, or none was pasted, use the selection rule (1 → use it, >1 → ask, 0 → stop clean) in § Connect first, then propose. Then **read the folders already in that workspace** — same section. Do this before the objective question.
 4. **Env always wins.** If the human already exported `IMMUT_API_URL` / `IMMUT_API_KEY` / `IMMUT_WORKSPACE_ID`, use those and **skip the paste** (precedence above). This is how a scheduled or headless/unattended invocation **supplies** its credentials (the scheduler or host injects the env; the skill does not invent them). An unattended run has **no human to say yes per file**, so it protects **only** within the scope the human already authorised at setup — and only when `sweep.scheduler.unattendedUpload` is true; it never widens scope on its own.
@@ -317,14 +316,29 @@ run sees the same difference, retries, fails again, and loops forever.
 | **400 `FILE_ALREADY_REGISTERED`** (`POST /documents`) | These exact bytes are **already protected** in this org, under another path | `already_registered_elsewhere` | `documentId` = the response's **`existingDocumentId`**, plus `proofForMtimeMs`/`proofForSizeBytes` and mtime/size from the **step-1 values** |
 | **400 "already been uploaded as a version"** (`POST /documents/:id/version`) | These bytes are already a version of this document | `unchanged_since_check` | mtime/size from the **step-1 values**, so it is not retried |
 | **402 `PAYMENT_METHOD_REQUIRED`** | This org has never added a card, so immut will not protect anything yet | `upload_failed` | mtime/size from the **step-1 values**. **Stop the sweep**, every remaining file fails the same way. Tell them: immut needs a card on the organisation before it can protect files, and they add it in the immut app |
-| **403 `TRIAL_UPLOAD_CREDIT_EXHAUSTED`** | The trial's **one-time** upload credit is spent. It does **not** refill next month, and deleting files does not return it | `upload_failed` | mtime/size from the **step-1 values**. **Stop the sweep.** Say it is the trial allowance, not a monthly limit, so they do not wait for a reset that never comes |
-| **403 `IMMUT_UPLOAD_LIMIT`** | The plan's allowance for this billing period is used up | `upload_failed` | mtime/size from the **step-1 values**. **Stop the sweep.** Relay the `usage` object if the response carries one; invent no numbers if it does not |
+| **403 `TRIAL_UPLOAD_CREDIT_EXHAUSTED`** | The trial's **one-time** upload credit is spent. It does **not** refill next month, and deleting files does not return it | `upload_failed` for the file that got the 403; **`awaiting_upload_allowance` for every qualifying file you never attempted** | mtime/size from the **step-1 values**. **Stop the sweep.** Say it is the trial allowance, not a monthly limit, so they do not wait for a reset that never comes |
+| **403 `IMMUT_UPLOAD_LIMIT`** | The plan's allowance for this billing period is used up | `upload_failed` for the file that got the 403; **`awaiting_upload_allowance` for every qualifying file you never attempted** | mtime/size from the **step-1 values**. **Stop the sweep.** Relay the `usage` object if the response carries one; invent no numbers if it does not |
 | **403 `STORAGE_LIMIT`** | Storage is full. Distinct from the upload count, so they can be under one and over the other | `upload_failed` | mtime/size from the **step-1 values**. **Stop the sweep** |
 | **401 — any 401, whatever the body** | The key is not accepted: revoked, expired, mistyped, or pointed at the wrong host | `upload_failed` | mtime/size from the **step-1 values**. **Stop the sweep.** Tell them the key is no longer accepted and they need a new one from Organization Settings → AI Agents |
 | **403 `API_ACCESS_DISABLED`** | The key is valid; API access is not switched on for this organisation | `upload_failed` | mtime/size from the **step-1 values**. **Stop the sweep.** Say the key is fine and the entitlement is not, so they do not go and mint a second key that fails identically |
 | **403 `INSUFFICIENT_SCOPE` / `SCOPE_NOT_PERMITTED`** | The key does not carry a scope this call needs | `upload_failed` | mtime/size from the **step-1 values**. **Stop the sweep.** Name the missing scope from `details.required`, and say the key needs replacing, **never** that the human should widen it — see § What you may call |
 | **429 — any 429, whatever the body** | **Too fast. Not a failure** | **none yet — wait and retry** | **do not write an entry**; honour `Retry-After`, then upload the same file again |
 | **other 4xx / 5xx** | Did not store | `upload_failed` | mtime/size from the **step-1 values**; keep the status and message |
+
+⛔ **The three allowance rows are the ONLY place you ever learn the customer's budget, so record what
+they tell you.** Billing is not agent-readable, so a 403 carrying a `usage` object is the one authoritative
+number you will ever see. Write it to `uploadBudget` (`references/state.md`): `remainingThisPeriod: 0`,
+`source: "observed"`, `knownAt`, and `kind` — **`trial_one_time` for `TRIAL_UPLOAD_CREDIT_EXHAUSTED`,
+`monthly` for `IMMUT_UPLOAD_LIMIT`**. Getting `kind` wrong is not cosmetic: it decides whether you tell a
+customer to wait for a reset or that no reset is coming. If the response carries no `usage`, record that
+the limit was reached **without a number** and invent nothing.
+
+⛔ **On the two upload-allowance rows, the files you never attempted are `awaiting_upload_allowance`, not
+`upload_failed`.** Only the file that actually received the 403 failed. Every other qualifying file was
+selected and never tried, so filing it as failed puts it under *"Attempted, not protected"* in a document
+going to an investor and describes an attempt that never happened — the same rule the daily-wall row below
+already states, applied to the monthly one. `STORAGE_LIMIT` is different: it is not an upload count, so
+say so plainly rather than implying more allowance would help.
 
 ⛔ **Seven of those rows are the human's to fix, and each needs its own sentence.** The four billing ones
 were collapsed into "other 4xx" until 2026-07-29, so a brand-new customer whose card had not cleared
@@ -362,7 +376,7 @@ reached without a number.
 ⛔ **429 is the one row that is not a verdict, and the backlog work made it common.** The agent API limits
 each key and returns `429` with a `Retry-After` header. **Do not treat any particular number as fact** —
 the limit is per key and configurable (defaults are around 60 a minute and 10,000 a day), and folder calls
-and salt fetches spend the same budget as uploads.
+spend the same budget as uploads.
 A first sweep in `one_pass` mode is explicitly an invitation to upload a whole back catalogue in one run,
 so a 250-file sweep walks straight into it. Filing those as `upload_failed` would print most of the
 customer's evidence under **"Attempted, not protected"** in a document going to an investor, describing a
@@ -403,7 +417,16 @@ failure that never happened — the request simply arrived a second too early.
 
 **`already_registered_elsewhere` is a PROTECTED row, not a failure.** The file genuinely has a proof;
 immut just refused a second copy of identical bytes. It carries a real `documentId`, so it belongs in
-report **section 1**, and the proof reference can be fetched against that id.
+report **section 1**.
+
+⚠️ **But it arrives with no transaction reference, and nothing can fetch one.** The 400 body returns
+`existingDocumentId` and no `xrplTransactionId`, and the salt fetch that used to carry a reference back was
+removed on 2026-08-03. So this row is genuinely protected, sits in section 1, and has an **empty Verify
+cell** — and per report Rule 9 it carries no permanence claim, because `xrplNetwork` is unknown for it too.
+**That is the honest rendering: do not improvise a call to fill the gap** (nothing in § What you may call
+does it) and do not quietly move the row to section 2, which would tell an investor a protected file was
+excluded. The exact cell wording is specified once, in `references/report.md` § section 1 — follow it
+there rather than inventing one here.
 
 **`upload_failed` goes in section 1 too, under its own sub-heading "Attempted, not protected".** It must
 **never** land in section 2 — that section is headed *"Deliberately excluded, and why"*, and filing a
@@ -420,6 +443,12 @@ the reasoning **only** from this field, and the app joins a run to its files on
 view, with no recorded reason for why you protected it. The upload still returns `201`, so nothing tells
 you it happened.
 
+**"EVERY protect upload" includes `POST /documents/<id>/version`.** That was not true until 2026-08-03:
+the version route read only the `file` part, § Classification step 11 told you so, and this rule and that
+one openly contradicted each other. The route now parses it, and a version sent none inherits the latest
+revision's rather than being blank. Inheritance is the floor, not permission to skip: you read the new
+bytes, so send the verdict you formed about them.
+
 This is not hypothetical. In the 2026-08-01 end-to-end run, 3 of 16 protected files reached immut with no
 classification at all, and the customer would have seen 13 files with reasons and 3 that simply appeared.
 For a product whose claim is that it shows you why, that is the failure to avoid.
@@ -432,7 +461,7 @@ The 201 response is the **whole document**, and the proof already exists at that
 |---|---|---|
 | `transactionHash` | **`data.xrplTransactionId`** | see the naming trap below |
 | `xrplNetwork` | `data.xrplNetwork` | `testnet` or `mainnet` |
-| `hashScheme` | `data.hashScheme` | decides whether a salt is needed |
+| `hashScheme` | `data.hashScheme` | tells the READER whether they need a salt from immut to verify |
 | `documentId` | `data._id` on a **first** upload | the root document; **unchanged across versions** |
 | `versionDocumentId` | `data._id` on a **`/version`** upload | a *different* document (`parentDocument` = the root) |
 | `proofForMtimeMs` · `proofForSizeBytes` | the file's mtime and size **as uploaded** | Gate P compares these; without them the gate cannot fail |
@@ -442,7 +471,7 @@ The 201 response is the **whole document**, and the proof already exists at that
 > `parentDocument: null` — so a `documentId` overwritten with a version id will never appear in a document
 > listing, for the customer or for support. Keep `documentId` pointing at the root; take
 > `transactionHash` / `xrplNetwork` / `hashScheme` from the version response (it is a new proof over new
-> bytes); fetch the salt against the **version** id.
+> bytes). **No salt is fetched or stored any more** — see the callout below.
 
 **Naming trap — one value, four names.** Read the right field or you will record nothing and not notice:
 
@@ -451,15 +480,26 @@ The 201 response is the **whole document**, and the proof already exists at that
 | the reference | **`xrplTransactionId`** | `txHash` | `transactionHash` |
 | the network | `xrplNetwork` | `ledger` | `network` |
 
-**If the scheme is salted** (`hmac-sha256-nonce-v2` or `-v3`; v3 is the default, but it is a per-org setting so check, do not assume), also fetch the salt and record it as `proofNonce`:
+⛔ **DO NOT FETCH THE PROOF SALT, AND DO NOT RECORD ONE. Removed 2026-08-03.**
 
-```
-GET /api/v1/proofs/<documentId>?includeSalt=true    → data.proofNonce
-```
+The skill used to `GET /api/v1/proofs/<id>?includeSalt=true` and store the result as `proofNonce` for
+every protected file, for one purpose: rendering the report's verification appendix. **A salt is a
+verification key.** Holding one meant every customer had a folder on their laptop containing a key per
+protected file, whose only protection was a `.gitignore` — and git is not how that leaks. Dropbox, iCloud
+Drive, OneDrive and a zipped project sent to a contractor all bypass it completely.
 
-Without the salt **nobody can verify the file** — that is by design, not a bug: the value on the public record is computed from the file's fingerprint *and* the salt, so the record alone gives nothing away. For `sha256-plain-v1` there is no salt and none is needed.
+**The fix is deletion, not a stronger control.** immut holds the salt already; it is on the certificate
+and in the diligence pack the customer downloads from immut when they need to hand evidence to someone.
+That pack was verified end to end on 2026-08-03 — recompute the commitment from its salt, confirm the
+transaction on the public ledger, both match — so nothing is lost by the agent not holding a second copy.
 
-> **Fragile, do not "tidy" this.** That endpoint lives in the hash-only router, and it resolves a stored upload only because `routes/api/v1/proofs.js:246` does a plain `Document.findOne` with no `hashOnly` filter. It is an accident of implementation, not a documented contract. If a future change tightens that router to hash-only documents, salt retrieval breaks silently and every report loses its verification. If it starts 404ing, this is why. The salt is also always on the certificate PDF.
+**What the agent still records is enough for its own job:** `transactionHash`, `xrplNetwork` and
+`hashScheme` come straight off the upload response. Those give a public explorer link and let the report
+say what was protected and when. What they do not give is the ability to prove a specific file matches a
+specific record, and that is deliberate: **that capability belongs to whoever holds the evidence, not to
+the machine that swept it.**
+
+For `sha256-plain-v1` there was never a salt and none is needed.
 
 Never invent, pad, or guess any of these values. If the response did not contain it, record `null` and let the report say so.
 

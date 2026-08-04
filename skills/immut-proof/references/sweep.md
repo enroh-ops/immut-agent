@@ -2,7 +2,7 @@
 
 A drop zone where **any new or mtime/size-changed file is uploaded to immut with no classification**. No keyword scoring, no draft skip, no ask.
 
-### Wizard Q5
+### Choosing the folder
 
 ```text
 I’ll set up an **always-protect** folder. Anything you put there is sent to immut without checking content.
@@ -58,16 +58,63 @@ human as an obstacle rather than a choice. The human's only visible escape was t
 single folder, which dropped 246 files out of scope in one keystroke. Nobody had told them how big the
 job was, or that it would have drained on its own.
 
+### Two budgets, and the one that actually binds is not the read cap
+
+⛔ **Reading and uploading are limited by different things, and sizing on the read cap alone has misled
+every customer with a real back catalogue.**
+
+| | Limit | Who pays | Runs out |
+|---|---|---|---|
+| **Reading** | `sweep.readCapPerRun`, default 60 | the customer's host, in model time | per run, refills next run |
+| **Uploading** | immut's plan allowance | the customer's plan | **trial: 20, one-time, never refills. Paid: per period, and it does not roll over** |
+
+**You cannot look the allowance up.** Billing is deliberately not agent-readable (`api.md` § What you may
+call), so the only two honest sources are **the human, here in this offer**, and the `usage` object on a
+403 that has already happened. Ask, record it in `uploadBudget`, and correct it when immut tells you
+otherwise. ⛔ **Never invent a number, and never assume a plan.**
+
+⛔ **On a trial this is the difference between a useful product and a wasted account.** Twenty credits,
+one time, no refill, and no way to undo an upload. Spending them on whatever the read order happened to
+surface first — with the human never asked — is the failure this whole section exists to prevent. If
+`uploadBudget.kind` is `trial_one_time`, take an explicit yes on the first batch before uploading
+anything, however clear the policy is.
+
 Then state the size and offer three numbered options:
 
 ```text
-254 candidates in scope after dropping media.
-I can read about 60 per run here.
+254 candidates in scope.
+I can read about 60 per run here, and your immut plan protects 100 files a month.
 
 1. Work through all of it now (about 4 batches, ~20 min)  (Recommended)
 2. Spread it over the daily runs (done in about 4 days)
 3. Narrow the scope first, then sweep
 ```
+
+**Say both numbers whenever they disagree.** Reading 254 files in four batches while the plan protects 100
+a month means the reading finishes this week and the protecting does not. A customer who hears only the
+first number believes they are covered when a queue is still draining. Where the allowance is the binding
+one, name it in the same breath: *"I can read all 254 this week; protecting them takes a few months at 100
+a month, so we should decide what goes first."*
+
+**Then ask, separately, what goes first** (hard rule 6: this is its own numbered question). The answer is
+an ordered list recorded once as `protectionPolicy.order`, and every later run spends the allowance in
+that order without asking again:
+
+```text
+Your plan protects 100 files a month, and about 240 of these look like evidence.
+What should I protect first? Reply with the numbers in your order, e.g. "2,1,3,4".
+
+1. Executed contracts
+2. IP: inventions, designs, source, specs
+3. Compliance records: approved policies, filings, completed reviews
+4. Everything else that qualifies
+```
+
+⛔ **`uploadBudget.kind` decides the wording, and getting it wrong costs the customer real money or real
+time.** A monthly allowance refills; the trial credit never does. **The wording rules are stated once, in
+`references/report.md` § section 1** (the `awaiting_upload_allowance` sub-heading) — read them there and
+use the same wording here. They are not repeated in this file, because a second copy of a customer-facing
+sentence is a second copy that drifts.
 
 **The numbers must be real.** The candidate count is what enumeration actually returned. The per-run
 figure is `sweep.readCapPerRun` (default 60), or the raised figure if you are using parallel readers
@@ -115,10 +162,23 @@ holds too — that approval question carries the approval and nothing else.
 yet — that is step 7 — so a `verified: true` precondition makes option 2 **unreachable in live setup**,
 which is the only place it matters. Gate it on what is knowable now: **Tier 1 or Tier 2 is achievable in
 this environment** (§ Automatic protection's tier test, which costs nothing and installs nothing) **and**
-`scheduler.declined` is not `true`. On Tier 3, manual, or a declined trigger there are no daily runs, and
+`scheduler.declined` is not `true`. On Tier 2 (a reminder), manual, or a declined trigger there are no daily runs, and
 offering to spread work across them is a promise made out of nothing: offer *"spread it over your next few
 `immut protect` runs"* instead and say who starts them (Gate A). The wording is the whole difference
 between a schedule and a hope.
+
+⛔ **Word it as a condition, not a promise, because at step 6 you genuinely do not know yet.** The tier
+test says a scheduled task is *achievable* here; step 7 is where one is actually installed, and it can
+still fail — a host may forbid creating recurring automation without its own approval, which is not
+something you can detect in advance. So offer *"spread it over the daily runs **I'll set up next, if this
+host lets me**"*, never *"the daily runs"* as a settled fact.
+*Observed 2026-08-04:* a run promised daily runs at step 6, could not install a trigger at step 7 because
+the host required in-session approval for recurring automation, and had to retract in session. The
+close-the-loop rule below caught it and the retraction was honest — but the customer had still been told
+something untrue about the question that decides how their whole back catalogue gets worked through.
+⚠️ **Do not "fix" this by moving the install before the offer.** Step 6 precedes step 7 deliberately:
+installing a trigger and kicking it first performs a full headless first sweep with the per-file ask
+bypassed, which is the 2026-07-21 incident this ordering exists to prevent.
 
 **Then close the loop at step 8.** The trigger can still fail to verify after you promised daily runs. If
 `plan.mode` is `over_daily_runs` and verification does not earn Gate A2, say so plainly in the same
@@ -147,9 +207,71 @@ looked at"* is the sentence that makes this an informed choice rather than an es
 **Spend the cap on the most likely evidence first.** When the cap binds, the order you read in decides
 what the customer gets this week, so it is a decision, not an implementation detail. Prioritise, in this
 order: pack cues in the path or the enumeration snippet; document types that carry signatures (contracts,
-board papers, filings) over notes and exports; paths the human named at Q4 or in custom keywords; most
-recently modified. **Then read every one of them in full** — this orders the queue, it never shortens it,
-and § Classification step 3 still forbids deciding anything from a name.
+board papers, filings) over notes and exports; paths the human named at § Canonical sequence step 2b or in
+custom keywords; most recently modified. **Then read every one of them in full** — this orders the queue,
+it never shortens it, and § Classification step 3 still forbids deciding anything from a name.
+
+**Record that judgement as `band` on the manifest entry, at enumeration** (`references/state.md`), so the
+order survives the run that computed it. `band` takes the objective's top-level folder keys plus `other` —
+for `fundraise`: `contracts`, `ip`, `compliance`, `other`. Recording it is what makes the reading order
+reviewable and repeatable instead of re-derived from scratch every run by a model that may weigh the four
+cues differently on Tuesday than it did on Monday.
+
+⛔ **A `band` is a guess about where to look next. A `folderKey` is a verdict about what something is.**
+They are different fields, they are set at different times by different things — `band` at enumeration
+from a path, `folderKey` by the engine after reading the document — and a `band` must never be copied into
+a `folderKey` or used to file anything.
+
+### Templated families: many files that are all the same document
+
+⛔ **The priority order above is not enough on its own, and the gap is not theoretical.** On 2026-08-04 a
+run met a Drive folder holding **120 executed supply agreements** — one counterparty, one term, one signing
+date, differing only in a counterpart number. **Every one genuinely qualified.** The customer's recorded
+order said executed contracts first. Followed literally, those 120 would have taken all twenty of a trial's
+credits, and the customer's MSA, NDAs, settlement, patent filing and invention disclosure would have got
+nothing. The run only escaped it by noticing on its own; nothing here told it to look.
+
+**A family is not noise, and this is what makes it dangerous.** Junk is easy — the engine rejects it. A
+family is real evidence, correctly classified, in the customer's top-priority category. It defeats a
+priority order by *volume within* a category rather than by ranking.
+
+**Detect it in two cheap steps.**
+
+1. **At enumeration, from shape alone** — many files in one folder whose names share a stem and differ only
+   by a number or date (`supply-agreement-0011`, `-0012`, …), with closely similar sizes. That is a
+   *candidate* family and nothing more. Record the stem as `family` on each entry (`references/state.md`).
+2. **Confirm by reading a few, never all** — take a spread (first, last, and some between; 3–6 is enough).
+   If they differ only in an identifier, it is a family. If they turn out to be 120 *different*
+   counterparties, it is not, and each is its own document — **this is exactly why shape alone may not
+   decide it.**
+
+**Then ask. Do not decide this one yourself.** Every member qualifies, so choosing between them is the
+customer's call about their own evidence, not a classification. Ask as **its own numbered question, before
+any approval** (hard rule 6), and say plainly what following their stated order literally would cost:
+
+```text
+Your Drive folder `bulk/` holds 120 files named `supply-agreement-NNNN.txt`. I opened six across the
+range. Every one is a genuinely executed contract, and they are the same agreement: same counterparty,
+same term, same signing date. Only the counterpart number changes.
+
+They qualify, all of them. You told me to protect executed contracts first, so taken literally they
+take your whole allowance and your MSA, NDAs, settlement and patent filing get nothing.
+
+1. Protect one as the representative, and spend the rest on the distinct documents  (Recommended)
+2. Protect them first as you originally said, and let them take the allowance
+3. Skip them for now
+
+Whichever you choose, the other 114 stay listed and unopened, and I keep telling you they are there.
+```
+
+Record the answer once, in `config.familyDecisions[]`, and apply it on every later run without asking
+again. ⛔ **The members you do not protect are `awaiting_upload_allowance`, never `declined_by_human`** —
+an answer about ordering is not a decline of 119 files, and § Operating loop step 4's one-reply-one-decline
+rule applies here exactly as anywhere else.
+
+⚠️ **Sampling a family is uncovered scope and must be reported as such.** You read six of 120; you did not
+judge the other 114. They stay `seen` in the manifest, they count in *not opened*, and § Protection report
+section 3 says so. **Never let "I read a representative" become "I checked them all."**
 
 ⛔ **Without an order this is a lottery, and on a real back catalogue it is a losing one.** A plain
 alphabetical enumeration of the 2026-07-22 fixture spends run 1 on sixty blog drafts and finds its first
@@ -193,13 +315,30 @@ step numbers, so the numbering is part of the contract and must not be renumbere
    `stored`, `unchanged_since_check` and `already_registered_elsewhere` only — a file that is waiting on a
    human, was declined, failed, or could not be opened has not been protected, so it is not "unchanged".
 
+   ⛔ **`seen` and `awaiting_upload_allowance` are NOT valid predecessors either, and for opposite
+   reasons.** A `seen` entry has bytes recorded from enumeration but has never been opened, so treating it
+   as unchanged would mark a file protected that nobody ever read. An `awaiting_upload_allowance` file was
+   read and judged worth protecting and is waiting only on the allowance — calling it "unchanged since
+   check" would quietly retire it from the queue and it would never be uploaded at all.
+
 3. **Read the document. Every decision requires it, including a decline.** A filename is a hint to read,
    never a reason to decide: **there is no `path_only` decision, and you never shortlist on filename
    semantics.** Record `readMode` — how you actually got the text (`full`, `extracted`, `partial`,
    `failed`) — because a decline made without opening the file is otherwise indistinguishable from a
    considered one. For any non-local file also record `remoteId` and `remoteModifiedTime`, keyed on the
    source's stable id and never on its name; without them every remote file looks new on every run.
-   Cannot open it at all → `undetermined_unreadable`, which is **uncovered scope, not an exclusion**.
+   **No extractable text → `undetermined_unreadable`, and STOP: do not run the engine on it.**
+
+   ⛔ **"Cannot open it at all" was too narrow, and the gap was measured, not theorised.** Reading a PNG
+   usually *succeeds* — it returns mojibake, not an error — so this branch never fired. The file went to
+   the engine, the engine found no quotable signal, and its output contract told it to **abstain**. An
+   abstain **stages** (step 6), and staging is a real multipart upload. Across 36 verdicts on 2026-08-03
+   the engine emitted `undetermined_unreadable` **zero times**: a customer's whole image library would
+   have been uploaded to immut unasked, against their allowance and storage, to answer a question nobody
+   asked them. **The test is whether you got usable TEXT, not whether the read returned bytes.**
+
+   `undetermined_unreadable` is **uncovered scope, not an exclusion** — nobody judged it. It does not go
+   to the engine, it is never staged, and **no bytes are uploaded**. Instead it joins a group (below).
 
 4. **Run the engine** (`references/engine.md`, read in full) to get `docType`, `docState`,
    `servesObjective`, `folderKey`, `confidence`, `folderConfidence` and the citable `signals`.
@@ -212,6 +351,12 @@ step numbers, so the numbering is part of the contract and must not be renumbere
    `classified_pending_approval`. Not evidence → `read_not_selected`, or `skipped_draft_wip` when
    `docState` is `draft` or `template`. Low `folderConfidence` is **not** a reason to hold a file: protect
    it and file it to the catch-all.
+
+   ⛔ **Never stage a file you could not read.** Staging uploads bytes, and an unreadable file has not
+   been judged by anyone — so uploading it buys nothing and spends the customer's allowance and storage
+   on a question they have not been asked. Those files leave by the group route below, carrying metadata
+   only. This rule exists because the opposite happened by accident: the engine abstained on them and the
+   abstain branch uploaded them.
 
    **If `config.stageForReview` is `true`, also send the abstained file to immut for the human to look
    at:** the same multipart `POST /documents`, plus the form field `review=true`, plus the usual
@@ -263,14 +408,52 @@ step numbers, so the numbering is part of the contract and must not be renumbere
    already recorded, so surfacing it costs nothing.
 
 10. **Record the proof reference** the response returned, plus `proofForMtimeMs`/`proofForSizeBytes` taken
-    from the values read in step 3, and fetch the salt in the same pass when the scheme is salted.
+    from the values read in step 3. **No salt is fetched** — see the callout in § The single storage rule.
 
 11. **A changed file that is already protected is a version, not a new document.** If the entry has a
     non-null `documentId` and the bytes changed, `POST /api/v1/documents/<id>/version` with the `file`
-    part **only** — that endpoint reads nothing else, so no `workspace`, no `folder`, and no
-    `agentClassification`. Record the new proof against `versionDocumentId`, leave `documentId` pointing
-    at the root, and check counterparty continuity first: a reused filename holding a different agreement
-    is a new document, not a revision.
+    part **and `agentClassification`** — but no `workspace` and no `folder`, because immut keeps the
+    document where the first upload filed it. Record the new proof against `versionDocumentId`, leave
+    `documentId` pointing at the root, and check counterparty continuity first: a reused filename holding
+    a different agreement is a new document, not a revision.
+
+    ⛔ **Send the classification you formed for THESE bytes, not the one you sent last time.** This step
+    used to say `file` only, on the grounds that the endpoint read nothing else. It did not, and the
+    result was that **every version of every document was unclassified** while its v0 carried a full
+    verdict — so a file's record got thinner with each revision, on exactly the files whose worth is that
+    they were worked on repeatedly. Fixed server-side 2026-08-03; the route now reads it.
+
+    **Why the fresh one matters:** a revision's verdict legitimately differs from its parent's. The
+    ordinary case is a contract moving `draft` → `executed`. If you omit the field the server falls back
+    to the latest revision's classification, so nothing is ever blank — but that fallback exists to stop
+    a gap, not to save you re-judging. You read the new bytes; send what you concluded about them.
+
+12. **Unreadable files are decided by GROUP, and nothing is uploaded to decide.** Cluster every
+    `undetermined_unreadable` file by **(folder, extension)** and report one row per group on the run
+    summary as `unreadableGroups[]`: `{folder, extension, count, totalBytes, earliest, latest}`.
+
+    **Why a group and not a queue of files.** A human does not decide *"is `logo-export-v3.png` my IP?"*
+    four hundred times; they decide *"is `designs/` mine?"* once. A 400-row queue means they decide about
+    nothing. To make the call they need the path, the type, the count, the size and the date range — and
+    **not the bytes**, which is why no upload happens and why there is no size threshold to pick.
+
+    ⛔ **Metadata only. Never put a filename in a group row**, not as `files`, not as an example, not as
+    "the largest one". Per-file names reach immut only through `decisions[]`, which is its own consent
+    defaulted off, and a group row must not be a way around that. Send the folder and the aggregates.
+
+    ⛔ **A group decision is a rule, not a row.** When the human answers, immut records one
+    `AgentInstruction` with `matchKind: "prefix"` covering that folder and extension, so the answer also
+    covers files that appear there later. Read them at the start of the next sweep exactly as you read
+    per-file instructions (§ Operating loop step 0b) and apply the group's verdict to every match.
+
+    **Reject is non-destructive here, and that is the point.** Nothing was uploaded, so rejecting a group
+    only means "do not offer these again" — there is nothing to delete. A wrong group-reject costs the
+    customer nothing permanent, which is what makes a group-level question fair to ask at all.
+
+    ⚠️ **Surface the outliers.** The residual risk is one important file hiding in a pile of junk — a
+    master logo among 400 exports. When a group contains a file that is much larger, much older, or
+    uniquely named, say so on the row so the human can look before deciding.
+
 
 ---
 
@@ -280,10 +463,23 @@ step numbers, so the numbering is part of the contract and must not be renumbere
 
 Only after wizard is complete (or human skipped wizard explicitly).
 
-0. **Gate U** (§ Pre-flight gates) — every path including "use existing config" and every scheduled run. If any active `folderKey` (including `auto-ingest`) does not resolve in `immutFolders`, upload nothing and stop. Go-live is not the only way to reach an upload, so this cannot live only in the go-live section. **On an unattended run, also check Gate C before uploading any *classified* file** — `unattendedUpload === true` is necessary but not sufficient; Gate C additionally requires an interactive first sweep on record, which is what stops a kicked job doing an unsupervised full first sweep.  
-0. **Read the human's queued decisions first.** `GET $API/api/v1/agent/instructions` (pending only, the
+0a. **Gate U** (§ Pre-flight gates) — every path including "use existing config" and every scheduled run. If any active `folderKey` (including `auto-ingest`) does not resolve in `immutFolders`, upload nothing and stop. Go-live is not the only way to reach an upload, so this cannot live only in the go-live section. **On an unattended run, also check Gate C before uploading any *classified* file** — `unattendedUpload === true` is necessary but not sufficient; Gate C additionally requires an interactive first sweep on record, which is what stops a kicked job doing an unsupervised full first sweep.  
+0b. **Read the human's queued decisions first — before you classify or upload anything.**
+   `GET $API/api/v1/agent/instructions` (pending only, the
    default). These are files a human settled **in the immut app** rather than in a session, so they are
-   the one input that did not come from this machine. Apply each before classifying anything:
+   the one input that did not come from this machine.
+
+   ⛔ **"First" is the rule, and the reason is a file the human already refused.** A pending `reject` only
+   stops an upload if you read it *before* you upload. Call this after your uploads and you have protected
+   a document the customer explicitly said no to — irreversibly, and with their consent on record for the
+   sweep but not for that file. A pending `protect` read late is milder but still wrong: you spend a read
+   from the cap, and possibly an upload credit, re-deciding something already decided.
+   *Observed 2026-08-04:* a run called this after its uploads and disclosed the deviation itself. Nothing
+   was missed because the queue was empty — which is exactly how this stays invisible until the one run
+   where it is not. The step is numbered `0b` to put it before everything; the number alone did not carry
+   the consequence, so it is written here.
+
+   Apply each before classifying anything:
    `action: "protect"` → protect that path this run, skipping the engine entirely, because a human has
    already decided; `action: "reject"` → record `declined_by_human`, do not upload it, **and do not stage
    it either**. A rejection is the human saying they do not want this file on immut at all; re-staging it
@@ -325,9 +521,42 @@ Only after wizard is complete (or human skipped wizard explicitly).
    changes, it is a new question, so re-classify it normally rather than treating the old no as permanent.
    Never upload a `declined_by_human` file on an unattended run, and never quietly re-ask on one either.
 
-5. **Upload:** for each confirmed file (and all auto-ingest), **upload the file** via multipart `POST /documents`.  
+5. **Upload, in `protectionPolicy.order`, until the allowance runs out.** Auto-ingest first (the human
+   already decided by putting a file there), then every confirmed file, taken **in policy order** rather
+   than in the order you happened to read them. Multipart `POST /documents` per file.
+
+   ⛔ **Reading order and protecting order are different decisions, and conflating them is what spends a
+   scarce allowance on the wrong files.** § Sizing's bands order what you *open*; `protectionPolicy.order`
+   orders what you *protect*. A run can legitimately read sixty files and upload the four the policy ranks
+   highest.
+
+   ⛔ **One credit per family per run, unless the human said otherwise.** Before spending, group the
+   qualifying files by `family` (§ Templated families). A family gets **one** upload — its representative —
+   and every other member becomes `awaiting_upload_allowance`. This holds *even when the family sits at the
+   top of `protectionPolicy.order`*, because that order ranks **categories** and says nothing about
+   spending an entire allowance inside one. Override it only with a recorded answer in
+   `config.familyDecisions[]`; absent one, protect the representative and **ask** (§ Templated families).
+   *Measured 2026-08-04:* without this rule, 120 near-identical counterparts were on course to take all
+   twenty of a trial's credits while the customer's MSA, NDAs and patent filing got none.
+
+   **Decrement `uploadBudget.remainingThisPeriod` after every upload that returns 201, and write it.**
+   ⚠️ **This is the field runs actually get wrong.** In the 2026-08-04 run it still read `20` after all
+   twenty were spent, so the next run would have believed it had a full allowance and discovered the truth
+   by hitting a 403 — which is the whole failure this budget exists to avoid. It is a counter: if you did
+   not decrement it, you did not record what you did.
+
+   **When the allowance is exhausted, the rest are `awaiting_upload_allowance` — not `upload_failed`.**
+   A file nobody attempted did not fail. When the counter reaches zero, or when a 403 tells you it has
+   (`api.md` § Upload responses), stop uploading, record
+   every remaining qualifying file as `awaiting_upload_allowance`, and say the count in the digest. Those
+   files keep their verdict, so the next period costs no re-reading (§ Classification step 9).
+
+   ⛔ **Say what is queued; never say when it will be done.** *"140 protected, 240 still queued"* is a
+   count and is fine. *"the rest next month"* or *"done by November"* is a promise nothing enforces, and
+   it is banned in every persistent channel by the same rule that bans a next-due date. A future run
+   protecting something is an automation claim, so **Gate A binds it** — see `report.md` § section 1.
 6. Persist check-state frequently; digest must list **sources used**. Never mention hash-only proofs.
-7. **Write the report** for the run that just finished, to `immut-reports/` (§ Protection report). Every sweep, no exceptions — interactive or unattended. Then name it, with the salt count, in the digest (or in the log when unattended).
+7. **Write the report** for the run that just finished, to `immut-reports/` (§ Protection report). Every sweep, no exceptions — interactive or unattended. Then name it in the digest (or in the log when unattended), with `gitignored · do not publish`. **No salt count** — the skill has held no salt since 2026-08-03.
 8. **If the installed trigger actually started this run, write `sweep.scheduler.lastObservedFireAt` = now into `immut.config.json`.** This is the field's only writer, and § Automatic protection step 5's staleness check is its only reader. Note it lives in **config**, while the installed invocation says "update check-state" — so writing it is a separate, deliberate act. Skip it and a trigger that died months ago keeps reporting as working.
 
    ⛔ **"The invocation says unattended" is not evidence that the trigger fired.** Anyone can type the
@@ -471,14 +700,11 @@ quietly guaranteed a full re-upload the next day. Neither produced an error mess
    previous entry has a non-null `documentId` and the bytes changed (§ Classification step 11).
 3. **Branch on the response.** 201 is not the only outcome; a **400** is the normal path and a **429** is
    not a response at all yet — it means retry (§ Upload responses).
-4. **Fetch the salt in this same pass** when `hashScheme` is salted — not a second loop over the files
-   afterwards, which doubles the work for nothing. Against `versionDocumentId` on the `/version` path,
-   `documentId` on a first upload.
-5. **Write the state entry, and branch here too** — steps 3's non-201 outcomes still need Gate P's fields:
+4. **Write the state entry, and branch here too** — step 3's non-201 outcomes still need Gate P's fields:
    - **201** — all proof fields from the response, plus `proofForMtimeMs`/`proofForSizeBytes` from the
      step-1 values.
    - **400 `FILE_ALREADY_REGISTERED`** — `documentId` = the response's `existingDocumentId`, **and
-     `proofForMtimeMs`/`proofForSizeBytes` from the step-1 values**, then fetch the salt against that id.
+     `proofForMtimeMs`/`proofForSizeBytes` from the step-1 values**.
      The proof is real, so omitting those two fields would fail Gate P and print
      `record incomplete, not verifiable` for a genuinely protected file — in section 1, contradicting
      § Upload responses, which calls this a protected row. Duplicate content arrives constantly, so this
@@ -551,21 +777,23 @@ document where the first upload filed it):
 ```bash
 curl -s -X POST "$API/api/v1/documents/$DOC_ID/version" \
   -H "Authorization: Bearer $KEY" \
-  -F "file=@$FILE_PATH"
+  -F "file=@$FILE_PATH" \
+  -F "agentClassification=$AGENT_CLASSIFICATION"
 ```
 
-Salt, when `hashScheme` is `hmac-sha256-nonce-v2` or `-v3` — same pass, not a second sweep. **Fetch it
-against the id the proof was actually created for**, which is *not* `$DOC_ID` on the version path:
+⛔ **There is no salt fetch. Removed 2026-08-03 — do not reintroduce one.** The skill used to call
+`GET /api/v1/proofs/<id>?includeSalt=true` after every upload and store the result, which put a
+**verification key per protected file** into the customer's project folder behind nothing but a
+`.gitignore`. immut holds the salt; it reaches whoever needs it through the certificate or the
+diligence pack, not through the machine that did the sweeping. **`references/report.md` § How to verify
+states this once and is the only place that should describe it** — do not restate the routes here. See `references/api.md` § Recording the proof
+reference.
 
-```bash
-# PROOF_DOC_ID = versionDocumentId after a /version upload · documentId after a first upload
-curl -s "$API/api/v1/proofs/$PROOF_DOC_ID?includeSalt=true" -H "Authorization: Bearer $KEY"
-```
-
-> ⛔ Using `$DOC_ID` here after a `/version` upload pairs the **new** `transactionHash` with the
-> **previous** version's salt. Gate P still passes, so the report prints Protected with a Verify link,
-> and the first person who checks gets a mismatch. § Recording the proof reference and the carry-forward
-> contract both say `versionDocumentId` — match them.
+> This also retired a live trap worth remembering if anyone is tempted to add it back: the fetch had to
+> use `versionDocumentId` after a `/version` upload, not the root `documentId`. Getting it wrong paired
+> the **new** transaction with the **previous** version's salt, Gate P still passed, the report printed
+> Protected with a Verify link, and the first person who checked got a mismatch. A whole class of
+> silent-wrong-evidence bug disappears with the fetch.
 
 **Do not** use `POST /proofs` or `immut proof create` here. The server derives proof after it receives the file.
 

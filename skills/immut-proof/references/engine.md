@@ -210,3 +210,22 @@ source, so a near-quote reads as a fabrication.
 "confidence": 0.0-1.0, "folderConfidence": 0.0-1.0, "signals": ["execution: \"...\"", "parties: \"...\""],
 "reason": "one citable sentence built from the signals" }`
 <!-- ENGINE:END -->
+
+---
+
+## Rendering
+
+**Two names the rest of the skill uses for this engine's output, defined once, here.** The engine emits
+`confidence`, `folderConfidence` and `signals`; the digest, the approval listing and the report ask for
+`score` and `reasons[]`. They are the same things rendered for a human, and are **derived, never
+separately measured** — never write one that disagrees with the number it came from.
+
+| Rendered name | Is | Rule |
+|---|---|---|
+| `score` | `confidence` as a word | **`strong`** at `≥ 0.75`, **`medium`** in `[0.6, 0.75)`. Below 0.6 is an abstain, so a protected row never carries a weaker score than `medium` |
+| `reasons[]` | `signals`, written for a person | Each keeps its quoted fragment. A reason you cannot find in the file it describes is worse than no reason |
+
+⛔ **This section is deliberately OUTSIDE the ENGINE markers.** The benchmark lifts everything between them
+verbatim as the classifier prompt, so moving this inside would change the measured engine and silently
+invalidate the baseline in `results/`. It moved here from `SKILL.md` on 2026-08-04 because that file had
+grown past its 5,000-token budget and this table was in the tail that a compaction drops.
