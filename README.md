@@ -1,6 +1,64 @@
 # immut-agent
 
-Tools for using [immut](https://www.immut.io) from AI agents and terminals: classify important business files, organise them in immut folders, and store them with permanent, independently verifiable, court-ready proof.
+Give your AI agent the job of protecting the files that prove your business.
+
+This repo holds the **immut-proof Agent Skill** and the immut CLI. The skill runs inside your own AI agent,
+such as Claude Code or Cursor. It reads the files it can reach, works out which ones matter, and sends
+those to [immut](https://www.immut.io) for proof. Then it keeps doing it as your files change.
+
+## What immut does
+
+[immut](https://www.immut.io) is the proof layer for digital files. It gives you permanent proof of two
+things: that a file existed on a given date, and that it has not changed since.
+
+The proof is independent. Anyone can check it without trusting immut and without trusting you. It holds up
+in court, and it outlives immut itself.
+
+immut is not a backup service. A proof is not a copy, and there is no restore command. It is also not a
+document manager, a compliance platform, or a way to file a patent.
+
+## What the skill does
+
+Your agent does the judging. immut does the proving. The split never reverses.
+
+1. **You state an objective.** A fundraise, an exit or sale, or ongoing compliance and IP protection.
+2. **The agent proposes folders** that match that objective, and you approve them.
+3. **The agent searches everything it can reach.** Your project, and any source you have connected to your
+   AI, such as Drive, Gmail, Teams or Slack.
+4. **It decides which files count** as evidence of your contracts, your IP or your compliance record. It
+   says why for each one, and it says when it is unsure.
+5. **You see the full list and say yes before anything is sent.** The first sweep is interactive. Nothing
+   uploads until you approve it.
+6. **It sets up a daily run** so protection continues without you present.
+7. **It writes a report** you can hand to an investor, a buyer or an auditor.
+
+## Why this matters
+
+Most businesses cannot prove when their own work existed. The gap shows up at the worst moment. A buyer
+asks for a data room. An investor runs diligence. A rival claims your idea first. An auditor asks for
+dated records.
+
+Reconstructing that history later is slow, expensive, and often not possible. This skill builds it as you
+go, so the answer is ready before anyone asks.
+
+## What it is not
+
+- Not a backup. There is no restore and no file recovery.
+- Not a preview. The skill never shows what it would protect instead of protecting it.
+- Not hosted by immut. Your agent runs on your machine and holds your own connections.
+- Not automatic without consent. You set the objective and the scope, and you approve go live.
+
+## Install
+
+```bash
+npx skills add enroh-ops/immut-agent
+```
+
+Then say `immut setup` to your agent. You need an immut account with API access. Sign up at
+[immut.io](https://www.immut.io). Read the agent docs at
+[immut.io/docs/agents](https://www.immut.io/docs/agents).
+
+---
 
 > **Agent summary**
 > - Install public skill: `npx skills add enroh-ops/immut-agent` (production `main`; `…#dev` for the development branch)
