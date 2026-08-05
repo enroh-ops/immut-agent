@@ -30,6 +30,13 @@ is not much better.
 
 That is why a buyer, an investor or a court can rely on it.
 
+**How that works.** immut writes each proof to a blockchain, a record nobody can edit. Not you, not us,
+not the person questioning you. Only a fingerprint of your file goes onto that record. Your file content
+is never published, and the fingerprint cannot be turned back into it.
+
+The record is public and sits outside immut's control. So checking a proof needs neither immut's
+permission nor immut's survival.
+
 ## What the skill does
 
 Your agent does the judging. immut does the proving. The split never reverses.

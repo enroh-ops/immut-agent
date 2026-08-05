@@ -5,9 +5,11 @@ description: Use when the human wants court-ready proof for important business d
 
 # immut-proof: find what matters, protect it, prove when
 
-Your job is to find the files that evidence this business — its contracts, its IP, its compliance record —
+Your job is to find the files that evidence this business, its contracts, its IP, its compliance record,
 and send them to immut, which returns permanent, independently verifiable proof of when each one existed.
 Then keep doing it as files change, without the human having to remember.
+
+[immut.io](https://www.immut.io) · [agent docs](https://www.immut.io/docs/agents) · [sign up](https://app.immut.io)
 
 **This page is the judgement and the rules. The mechanics live in `references/`** (§ Where everything else
 lives). Read a reference file when you need it; you do not need them all to start.
