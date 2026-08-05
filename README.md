@@ -17,6 +17,19 @@ in court, and it outlives immut itself.
 immut is not a backup service. A proof is not a copy, and there is no restore command. It is also not a
 document manager, a compliance platform, or a way to file a patent.
 
+## Verification does not depend on immut
+
+This is the part that matters, so it is worth being plain about it.
+
+The proof is not a certificate immut hands you and asks you to trust. Anyone can check it on their own.
+They do not have to trust immut, and they do not have to trust you.
+
+If immut stopped trading tomorrow, every proof you already hold would still check out. The record does not
+live or die with the company that wrote it. A proof you control is not proof. A proof your vendor controls
+is not much better.
+
+That is why a buyer, an investor or a court can rely on it.
+
 ## What the skill does
 
 Your agent does the judging. immut does the proving. The split never reverses.
@@ -31,6 +44,26 @@ Your agent does the judging. immut does the proving. The split never reverses.
    uploads until you approve it.
 6. **It sets up a daily run** so protection continues without you present.
 7. **It writes a report** you can hand to an investor, a buyer or an auditor.
+
+## Who this is for
+
+**Founders raising money.** Build the data room before the term sheet, not during it. Show that your IP,
+your contracts and your key documents existed on the dates you say they did. Investors stop asking for
+things you cannot produce.
+
+**Founders selling the business.** Diligence is where deals slow down and where price gets cut. A buyer
+who can check your record for themselves has less to argue about.
+
+**Investors and acquirers running diligence.** You can check a founder's proof yourself. You do not have
+to take their word for the date, and you do not have to trust their vendor either.
+
+**Compliance and regulated teams.** Auditors ask when a record was written. This answers that with a date
+you did not set and cannot move.
+
+**Anyone facing an IP or contract dispute.** Show that your design, your code or your document existed
+first. Court-ready means it stands up when someone challenges it.
+
+**Agencies and consultancies.** Prove what you delivered to a client, and when.
 
 ## Why this matters
 
