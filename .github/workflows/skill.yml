@@ -1,0 +1,86 @@
+name: skill
+
+# WHY THIS EXISTS (O-66, 2026-08-05).
+#
+# `skills/immut-proof/SKILL.md` shipped to `main` with YAML frontmatter that never parsed. The
+# `description:` value was an unquoted scalar containing `not backup: there is no restore`, and a
+# colon-space inside an unquoted scalar is read as a nested mapping key. The consequence is silent:
+# the skill loads with EMPTY metadata, so its name and description are dropped. Claude Code invokes a
+# skill by its description, and every directory renders that same frontmatter as listing copy, so a
+# skill nobody could auto-trigger and nobody could read looked completely fine in review.
+#
+# Nothing failed loudly. A release, a public-repo storefront pass and a distribution plan all went
+# past it. It was found by running `claude plugin validate` while packaging the plugin.
+#
+# The rule this encodes: A FORMATTING RULE APPLIED TO A MACHINE-READ FILE NEEDS A PARSER IN THE LOOP.
+# The em-dash cleanup for root CLAUDE.md hard rule 3 replaced `documents — proving` with
+# `documents: proving`, adding a second break to the same line. Same shape as the recorded lesson that
+# an em-dash cleanup silently defused its own test fixture.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  frontmatter:
+    name: SKILL.md frontmatter parses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - run: pip install pyyaml
+
+      - name: Every SKILL.md has frontmatter that parses, with a usable name and description
+        run: |
+          python3 - <<'PY'
+          import glob, re, sys
+          import yaml
+
+          failed = False
+          files = sorted(glob.glob('skills/**/SKILL.md', recursive=True))
+          if not files:
+              sys.exit("No SKILL.md found. If skills moved, update this workflow.")
+
+          for path in files:
+              text = open(path, encoding='utf-8').read()
+              m = re.match(r'^---\n(.*?)\n---\n', text, re.S)
+              if not m:
+                  print(f"::error file={path}::No YAML frontmatter block")
+                  failed = True
+                  continue
+              try:
+                  data = yaml.safe_load(m.group(1))
+              except yaml.YAMLError as e:
+                  # This is the O-66 failure. At runtime the skill loads with EMPTY metadata.
+                  print(f"::error file={path}::Frontmatter does not parse, so ALL fields are "
+                        f"silently dropped at runtime: {str(e).splitlines()[0]}")
+                  print("  Fix: make the value a folded block scalar (description: >-) so a colon, "
+                        "a quote or an apostrophe needs no escaping.")
+                  failed = True
+                  continue
+
+              for field in ('name', 'description'):
+                  if not (data or {}).get(field):
+                      print(f"::error file={path}::Frontmatter is missing '{field}'")
+                      failed = True
+
+              # The description is how the host decides to invoke the skill, and how every
+              # directory renders the listing. An empty-ish one is not a real failure mode we can
+              # test, but a suspiciously short one is worth blocking.
+              desc = (data or {}).get('description') or ''
+              if desc and len(desc) < 40:
+                  print(f"::error file={path}::description is {len(desc)} chars, too short to "
+                        f"route on")
+                  failed = True
+
+              if not failed:
+                  print(f"✅ {path}: name={data['name']!r}, description={len(desc)} chars")
+
+          sys.exit(1 if failed else 0)
+          PY
