@@ -84,3 +84,83 @@ jobs:
 
           sys.exit(1 if failed else 0)
           PY
+
+      - name: Install tokenizer
+        run: pip install tiktoken
+
+      - name: SKILL.md fits the re-attach budget
+        run: |
+          python3 - <<'PY'
+          import io, sys, tiktoken
+
+          # ⛔ WHY. Claude Code re-attaches only the FIRST ~5,000 tokens of a SKILL.md after compaction.
+          # Anything past that is silently absent exactly when the agent has lost its context and most
+          # needs the rules. The tail of this file is behaviour-critical: the abstained-file rule, and
+          # the pending_approval rule ("never protected, never a valid predecessor"). A missing rule
+          # does not error, it just changes what the agent does — the documented servesObjective
+          # coin-flip.
+          #
+          # Measured, not estimated. The chars/4 heuristic previously used read 5,051 and put the file
+          # over the cap; the real count is ~4,907. A guess in either direction is useless here.
+          CAP = 5000
+          WARN = 4700
+
+          path = 'skills/immut-proof/SKILL.md'
+          text = io.open(path, encoding='utf-8').read()
+          n = len(tiktoken.get_encoding('cl100k_base').encode(text))
+
+          print(f"{path}: {n} tokens (cap {CAP})")
+          if n > CAP:
+              print(f"::error file={path}::{n} tokens exceeds the {CAP} re-attach budget by {n-CAP}. "
+                    f"Everything past the boundary is silently dropped after compaction. "
+                    f"Move a section to references/ rather than trimming rules.")
+              sys.exit(1)
+          if n > WARN:
+              print(f"::warning file={path}::{n} tokens, only {CAP-n} below the {CAP} cap. "
+                    f"Move a section to references/ before adding anything.")
+          PY
+
+      - name: Every referenced file exists
+        run: |
+          python3 - <<'PY'
+          import io, re, os, sys
+
+          # A SKILL.md that points at references/foo.md which does not exist loses those mechanics
+          # silently: the agent reads a pointer, finds nothing, and carries on with less than it
+          # should. Renaming a reference is the easy way to cause this.
+          failed = False
+          for skill in ('skills/immut-proof/SKILL.md',):
+              base = os.path.dirname(skill)
+              text = io.open(skill, encoding='utf-8').read()
+              refs = sorted(set(re.findall(r'references/([A-Za-z0-9._-]+\.md)', text)))
+              if not refs:
+                  print(f"::warning file={skill}::no references/ links found - has the layout changed?")
+              for r in refs:
+                  target = os.path.join(base, 'references', r)
+                  if os.path.exists(target):
+                      print(f"  ok  {r}")
+                  else:
+                      print(f"::error file={skill}::references/{r} is linked but does not exist")
+                      failed = True
+          sys.exit(1 if failed else 0)
+          PY
+
+      - name: Dry-run and rehearsal stay removed
+        run: |
+          # Removed from every surface 2026-07-31 on DJ's instruction and must never reappear under any
+          # name. `--dry-run` as a shell script safety flag is deliberately not matched.
+          if grep -rniE '\b(dry.run|rehearsal|preview mode)\b' skills/ SETUP.md README.md 2>/dev/null \
+             | grep -viE '\-\-dry-run' ; then
+            echo "::error::dry-run / rehearsal language reappeared in a customer-facing skill file."
+            exit 1
+          fi
+          echo "OK: no dry-run or rehearsal language."
+
+      - name: Plugin manifest and MCP config parse
+        run: |
+          python3 -c "
+          import json
+          for f in ('.claude-plugin/plugin.json', '.mcp.json'):
+              json.load(open(f))
+              print(f'  ok  {f} parses')
+          "
