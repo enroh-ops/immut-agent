@@ -25,6 +25,10 @@ fact. Deliberate exception to that rule, managed rather than solved: `SKILL.md` 
 (it ships to customers and its token budget is spent on gates), so the consistency is maintained by the
 change checklist, not by a pointer.
 
+⛔ **Agent-first governs every decision here** (root `~/Documents/immut/CLAUDE.md` § Agent-first): the
+agent surface is designed and shipped first, and a capability is not shipped until an agent can discover,
+read and call it unaided. This repo is the clearest case - the customer's agent IS the product.
+
 **The one sentence.** Find the files that evidence this business — its contracts, its IP, its compliance
 record — get each one independently proved to have existed, unchanged, at a point in time, and keep doing
 it as those files change, without the human having to remember.

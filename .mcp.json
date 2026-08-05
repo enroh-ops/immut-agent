@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "immut": {
+      "type": "http",
+      "url": "https://backend.immut.io/mcp",
+      "headers": {
+        "Authorization": "Bearer ${IMMUT_API_KEY}"
+      }
+    }
+  }
+}

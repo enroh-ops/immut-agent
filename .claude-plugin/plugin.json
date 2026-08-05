@@ -1,0 +1,25 @@
+{
+  "name": "immut",
+  "displayName": "immut",
+  "description": "Court-ready proof of when your business files existed and that they have not changed. Finds the documents that evidence your contracts, IP and compliance, protects them, and keeps doing it as they change.",
+  "version": "0.1.0",
+  "author": {
+    "name": "immut",
+    "email": "djh@immut.io",
+    "url": "https://www.immut.io"
+  },
+  "homepage": "https://www.immut.io/ai-agents",
+  "repository": "https://github.com/enroh-ops/immut-agent",
+  "license": "MIT",
+  "keywords": [
+    "proof",
+    "evidence",
+    "due-diligence",
+    "compliance",
+    "intellectual-property",
+    "timestamping",
+    "audit",
+    "data-room"
+  ],
+  "mcpServers": "./.mcp.json"
+}
