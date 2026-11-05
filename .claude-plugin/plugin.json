@@ -20,6 +20,5 @@
     "timestamping",
     "audit",
     "data-room"
-  ],
-  "mcpServers": "./.mcp.json"
+  ]
 }

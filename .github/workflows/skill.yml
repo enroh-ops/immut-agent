@@ -156,11 +156,27 @@ jobs:
           fi
           echo "OK: no dry-run or rehearsal language."
 
-      - name: Plugin manifest and MCP config parse
+      - name: Plugin manifest parses
         run: |
           python3 -c "
           import json
-          for f in ('.claude-plugin/plugin.json', '.mcp.json'):
-              json.load(open(f))
-              print(f'  ok  {f} parses')
+          json.load(open('.claude-plugin/plugin.json'))
+          print('  ok  .claude-plugin/plugin.json parses')
+          "
+
+      - name: No MCP server is registered
+        run: |
+          # The only MCP server this plugin ever registered (backend.immut.io) is shut down. Whoever
+          # controls that name later would receive every install's key and could speak to its agent.
+          if [ -e .mcp.json ]; then
+            echo "::error::.mcp.json exists: this plugin must not register an MCP server."
+            exit 1
+          fi
+          python3 -c "
+          import json, sys
+          m = json.load(open('.claude-plugin/plugin.json'))
+          if 'mcpServers' in m:
+              print('::error::plugin.json registers mcpServers; the immut MCP server is shut down.')
+              sys.exit(1)
+          print('OK: no MCP server registered.')
           "
